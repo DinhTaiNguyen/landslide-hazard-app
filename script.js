@@ -10,6 +10,13 @@
   const clearLayerBtn = document.getElementById('clearLayerBtn');
   const resetViewBtn = document.getElementById('resetViewBtn');
 
+  const crsSelect = document.getElementById('crsSelect');
+  const rasterStats = document.getElementById('rasterStats');
+  const colorbarPanel = document.getElementById('colorbarPanel');
+  const colorbarMin = document.getElementById('colorbarMin');
+  const colorbarMid = document.getElementById('colorbarMid');
+  const colorbarMax = document.getElementById('colorbarMax');
+
   let map = null;
   let currentRasterLayer = null;
   let currentRasterBounds = null;
@@ -29,6 +36,30 @@
     uploadStatus.textContent = message;
   }
 
+  function updateRasterStats(min, max, width, height, crsText) {
+    rasterStats.innerHTML =
+      'Min: ' + min.toFixed(2) + '<br>' +
+      'Max: ' + max.toFixed(2) + '<br>' +
+      'Size: ' + width + ' × ' + height + '<br>' +
+      'CRS: ' + crsText;
+  }
+
+  function updateColorbar(min, max) {
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+
+    const mid = (min + max) / 2;
+    colorbarMin.textContent = min.toFixed(2);
+    colorbarMid.textContent = mid.toFixed(2);
+    colorbarMax.textContent = max.toFixed(2);
+    colorbarPanel.style.display = 'block';
+
+    addConsoleLine('info', 'Color bar updated');
+  }
+
+  function hideColorbar() {
+    colorbarPanel.style.display = 'none';
+  }
+    
   function clearConsole() {
     consoleContent.innerHTML = '';
     addConsoleLine('info', 'Console cleared');
@@ -203,14 +234,28 @@
     const url = canvas.toDataURL('image/png');
 
     let bounds;
-    if (ascLooksGeographic(asc)) {
+    let crsText = 'Auto detect';
+
+    const selectedCRS = crsSelect ? crsSelect.value : 'auto';
+
+    if (selectedCRS === 'EPSG:4326' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) {
       bounds = [
         [asc.yll, asc.xll],
         [asc.yll + asc.height * asc.cellsize, asc.xll + asc.width * asc.cellsize]
       ];
-      addConsoleLine('info', 'ASC looks geographic; using file bounds');
+      crsText = 'EPSG:4326 / geographic';
+      addConsoleLine('info', 'ASC displayed using geographic bounds');
+    } else if (selectedCRS === 'EPSG:4549') {
+      bounds = [[-20, -20], [20, 20]];
+      crsText = 'EPSG:4549 selected (preview only)';
+      addConsoleLine('warn', 'EPSG:4549 selected. Browser preview uses fallback bounds only.');
+    } else if (selectedCRS === 'EPSG:3857') {
+      bounds = [[-20, -20], [20, 20]];
+      crsText = 'EPSG:3857 selected (preview only)';
+      addConsoleLine('warn', 'EPSG:3857 selected. Browser preview uses fallback bounds only.');
     } else {
       bounds = [[-20, -20], [20, 20]];
+      crsText = 'Unknown / fallback preview';
       addConsoleLine('warn', 'ASC not in lat/lon; using fallback bounds');
     }
 
@@ -220,6 +265,8 @@
 
     mapEmptyNote.style.display = 'none';
     setStatus('Loaded ' + fileName);
+    updateColorbar(asc.min, asc.max);
+    updateRasterStats(asc.min, asc.max, asc.width, asc.height, crsText);
     addConsoleLine('info', 'ASC displayed successfully');
   }
 
@@ -275,6 +322,8 @@
 
     mapEmptyNote.style.display = 'none';
     setStatus('Loaded ' + file.name);
+    updateColorbar(min, max);
+    updateRasterStats(min, max, width, height, 'TIFF preview');
     addConsoleLine('info', 'TIFF displayed successfully');
   }
 
@@ -341,6 +390,8 @@
   clearLayerBtn.addEventListener('click', function () {
     clearCurrentLayer();
     mapEmptyNote.style.display = 'block';
+    hideColorbar();
+    rasterStats.textContent = 'No raster loaded';
     setStatus('Layer cleared');
     addConsoleLine('warn', 'Raster layer cleared');
   });

@@ -40,10 +40,20 @@
         <div id="selectedFile" class="field-box">None</div>
       </div>
 
-      <div class="field-group">
-        <div class="field-label">Status</div>
-        <div id="uploadStatus" class="field-box">Waiting for file...</div>
-      </div>
+    <div class="field-group">
+        <div class="field-label">Coordinate Reference System</div>
+        <select id="crsSelect" class="field-select">
+            <option value="auto">Auto detect</option>
+            <option value="EPSG:4326">EPSG:4326 - WGS84</option>
+            <option value="EPSG:3857">EPSG:3857 - Web Mercator</option>
+            <option value="EPSG:4549">EPSG:4549 - CGCS2000 / 3-degree Gauss-Kruger CM 120E</option>
+        </select>
+    </div>
+
+    <div class="field-group">
+        <div class="field-label">Raster statistics</div>
+        <div id="rasterStats" class="field-box">No raster loaded</div>
+    </div>
 
       <div class="field-group">
         <div class="field-label">Tips</div>
@@ -56,13 +66,34 @@
 
     <main class="center-panel card">
       <div class="card-title">Map Preview</div>
-      <div class="map-wrap">
-        <div id="map"></div>
-        <div id="mapEmptyNote" class="map-empty-note">
-          Upload a raster to display it here
-          <small>The console on the right will show every step.</small>
+        <div class="map-wrap">
+            <div id="map"></div>
+
+            <div class="map-overlay-top">
+                <div class="map-overlay-title">Landslide Hazard Prediction Map</div>
+                <div class="map-overlay-actions">
+                    <button class="map-chip active" type="button">Hazard</button>
+                    <button class="map-chip" type="button">Output</button>
+                </div>
+            </div>
+
+            <div id="mapEmptyNote" class="map-empty-note">
+                Upload a raster to display it here
+                <small>The console on the right will show every step.</small>
+            </div>
+
+            <div id="colorbarPanel" class="colorbar-panel" style="display:none;">
+                <div class="colorbar-title">Raster Legend</div>
+                <div class="colorbar-wrap">
+                    <div class="colorbar-gradient"></div>
+                    <div class="colorbar-labels">
+                        <span id="colorbarMax">max</span>
+                        <span id="colorbarMid">mid</span>
+                        <span id="colorbarMin">min</span>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
     </main>
 
     <aside class="right-panel card">
