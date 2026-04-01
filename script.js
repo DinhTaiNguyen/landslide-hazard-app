@@ -1,5 +1,5 @@
 (function () {
-  const fixedRasterConfigs = {
+  const rasterConfigs = {
     dem: {
       label: 'DEM Data',
       input: document.getElementById('demFileInput'),
@@ -23,6 +23,24 @@
       input: document.getElementById('soilThicknessFileInput'),
       selectedFile: document.getElementById('soilThicknessSelectedFile'),
       viewToggle: document.getElementById('soilThicknessViewToggle')
+    },
+    landUse: {
+      label: 'Land Use Map',
+      input: document.getElementById('landUseFileInput'),
+      selectedFile: document.getElementById('landUseSelectedFile'),
+      viewToggle: document.getElementById('landUseViewToggle')
+    },
+    vegetation: {
+      label: 'Vegetation Map',
+      input: document.getElementById('vegetationFileInput'),
+      selectedFile: document.getElementById('vegetationSelectedFile'),
+      viewToggle: document.getElementById('vegetationViewToggle')
+    },
+    lithology: {
+      label: 'Lithology Map',
+      input: document.getElementById('lithologyFileInput'),
+      selectedFile: document.getElementById('lithologySelectedFile'),
+      viewToggle: document.getElementById('lithologyViewToggle')
     }
   };
 
@@ -54,10 +72,6 @@
   const soilUploadContainer = document.getElementById('soilUploadContainer');
   const soilTableArea = document.getElementById('soilTableArea');
 
-  const geoCountInput = document.getElementById('geoCountInput');
-  const generateGeoInputsBtn = document.getElementById('generateGeoInputsBtn');
-  const geoUploadContainer = document.getElementById('geoUploadContainer');
-
   const panelTabs = document.querySelectorAll('.panel-tab');
   const subPanels = document.querySelectorAll('.left-subpanel');
 
@@ -67,7 +81,6 @@
   let map = null;
   let rasterLayers = {};
   let activeLayerKey = null;
-  let dynamicGeoConfigs = {};
 
   if (typeof proj4 !== 'undefined') {
     proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs +type=crs');
@@ -88,11 +101,10 @@
   }
 
   function setStatus(message) {
-    if (uploadStatus) uploadStatus.textContent = message;
+    uploadStatus.textContent = message;
   }
 
   function updateRasterStats(min, max, width, height, crsText, layerName) {
-    if (!rasterStats) return;
     rasterStats.innerHTML =
       'Layer: ' + layerName + '<br>' +
       'Min: ' + min.toFixed(2) + '<br>' +
@@ -153,13 +165,7 @@
     rasterLayers = {};
     activeLayerKey = null;
 
-    Object.values(fixedRasterConfigs).forEach(cfg => {
-      cfg.selectedFile.textContent = 'None';
-      cfg.viewToggle.checked = true;
-      cfg.viewToggle.disabled = true;
-    });
-
-    Object.values(dynamicGeoConfigs).forEach(cfg => {
+    Object.values(rasterConfigs).forEach(cfg => {
       cfg.selectedFile.textContent = 'None';
       cfg.viewToggle.checked = true;
       cfg.viewToggle.disabled = true;
@@ -167,7 +173,7 @@
 
     mapEmptyNote.style.display = 'block';
     hideColorbar();
-    if (rasterStats) rasterStats.textContent = 'No raster loaded';
+    rasterStats.textContent = 'No raster loaded';
   }
 
   function fitActiveLayer() {
@@ -361,7 +367,7 @@
       activeLayerKey = null;
       mapEmptyNote.style.display = 'block';
       hideColorbar();
-      if (rasterStats) rasterStats.textContent = 'No raster loaded';
+      rasterStats.textContent = 'No raster loaded';
       return;
     }
 
@@ -376,6 +382,8 @@
   }
 
   function registerRasterLayer(layerKey, layerLabel, fileName, leafletLayer, bounds, stats) {
+    const cfg = rasterConfigs[layerKey];
+
     if (rasterLayers[layerKey] && rasterLayers[layerKey].layer && map.hasLayer(rasterLayers[layerKey].layer)) {
       map.removeLayer(rasterLayers[layerKey].layer);
     }
@@ -394,11 +402,8 @@
       crsText: stats.crsText
     };
 
-    const cfg = fixedRasterConfigs[layerKey] || dynamicGeoConfigs[layerKey];
-    if (cfg) {
-      cfg.viewToggle.disabled = false;
-      cfg.viewToggle.checked = true;
-    }
+    cfg.viewToggle.disabled = false;
+    cfg.viewToggle.checked = true;
 
     activeLayerKey = layerKey;
     updateActiveFromVisibleLayers();
@@ -524,9 +529,7 @@
         return;
       }
 
-      const cfg = fixedRasterConfigs[layerKey] || dynamicGeoConfigs[layerKey];
-      if (cfg) cfg.selectedFile.textContent = file.name;
-
+      rasterConfigs[layerKey].selectedFile.textContent = file.name;
       setStatus('Reading ' + file.name + ' ...');
       addConsoleLine('info', 'File selected for ' + layerLabel + ': ' + file.name);
 
@@ -593,6 +596,7 @@
 
       const x = parts[0];
       const y = parseFloat(parts[1]);
+
       if (!Number.isFinite(y)) continue;
 
       xValues.push(x);
@@ -900,96 +904,6 @@
     return wrapper;
   }
 
-  function createGeoUploadBlock(index) {
-    const key = 'geoDynamic_' + index;
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'upload-section';
-
-    const titleRow = document.createElement('div');
-    titleRow.className = 'upload-section-title-row';
-
-    const title = document.createElement('span');
-    title.className = 'upload-section-title';
-    title.textContent = 'Geo map ' + index;
-
-    const toggleWrap = document.createElement('label');
-    toggleWrap.className = 'view-toggle-wrap';
-
-    const toggle = document.createElement('input');
-    toggle.type = 'checkbox';
-    toggle.checked = true;
-    toggle.disabled = true;
-
-    const toggleText = document.createElement('span');
-    toggleText.textContent = 'View';
-
-    toggleWrap.appendChild(toggle);
-    toggleWrap.appendChild(toggleText);
-
-    titleRow.appendChild(title);
-    titleRow.appendChild(toggleWrap);
-
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.asc,.tif,.tiff';
-    input.hidden = true;
-    input.id = 'geoFileInput_' + index;
-
-    const label = document.createElement('label');
-    label.className = 'dropbox';
-    label.htmlFor = input.id;
-    label.innerHTML = `
-      <div class="dropbox-icon">⤒</div>
-      <div class="dropbox-title">Upload geo raster ${index}</div>
-      <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
-    `;
-
-    const fileInfo = document.createElement('div');
-    fileInfo.className = 'field-box compact-box';
-    fileInfo.textContent = 'None';
-
-    dynamicGeoConfigs[key] = {
-      label: 'Geo map ' + index,
-      input,
-      selectedFile: fileInfo,
-      viewToggle: toggle
-    };
-
-    input.addEventListener('change', function (e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      handleRasterFile(file, key, dynamicGeoConfigs[key].label);
-    });
-
-    toggle.addEventListener('change', function () {
-      const layerObj = rasterLayers[key];
-      if (!layerObj) return;
-
-      layerObj.visible = toggle.checked;
-
-      if (toggle.checked) {
-        layerObj.layer.addTo(map);
-        activeLayerKey = key;
-        updateActiveFromVisibleLayers();
-        addConsoleLine('info', layerObj.label + ' turned on');
-      } else {
-        if (map.hasLayer(layerObj.layer)) {
-          map.removeLayer(layerObj.layer);
-        }
-        addConsoleLine('warn', layerObj.label + ' turned off');
-        updateActiveFromVisibleLayers();
-      }
-    });
-
-    wrapper.appendChild(titleRow);
-    wrapper.appendChild(input);
-    wrapper.appendChild(label);
-    wrapper.appendChild(fileInfo);
-
-    return wrapper;
-  }
-
   function generateRainfallInputs() {
     const count = parseInt(rainfallCountInput.value, 10);
     rainfallUploadContainer.innerHTML = '';
@@ -1022,23 +936,6 @@
     addConsoleLine('info', 'Generated ' + count + ' soil upload input(s)');
   }
 
-  function generateGeoInputs() {
-    const count = parseInt(geoCountInput.value, 10);
-    geoUploadContainer.innerHTML = '';
-    dynamicGeoConfigs = {};
-
-    if (!Number.isFinite(count) || count < 1) {
-      addConsoleLine('warn', 'Geo file count must be at least 1');
-      return;
-    }
-
-    for (let i = 1; i <= count; i++) {
-      geoUploadContainer.appendChild(createGeoUploadBlock(i));
-    }
-
-    addConsoleLine('info', 'Generated ' + count + ' geo upload input(s)');
-  }
-
   panelTabs.forEach(tab => {
     tab.addEventListener('click', function () {
       activatePanel(tab.dataset.panel);
@@ -1053,8 +950,8 @@
     });
   });
 
-  Object.keys(fixedRasterConfigs).forEach(layerKey => {
-    const cfg = fixedRasterConfigs[layerKey];
+  Object.keys(rasterConfigs).forEach(layerKey => {
+    const cfg = rasterConfigs[layerKey];
 
     cfg.input.addEventListener('change', function (e) {
       const file = e.target.files[0];
@@ -1102,7 +999,6 @@
 
   generateRainfallInputsBtn.addEventListener('click', generateRainfallInputs);
   generateSoilInputsBtn.addEventListener('click', generateSoilInputs);
-  generateGeoInputsBtn.addEventListener('click', generateGeoInputs);
 
   if (typeof proj4 === 'undefined') {
     addConsoleLine('err', 'proj4 library did not load');
@@ -1113,7 +1009,6 @@
   initMap();
   generateRainfallInputs();
   generateSoilInputs();
-  generateGeoInputs();
   addConsoleLine('info', 'System initialized');
   addConsoleLine('info', 'Ready. Upload DEM / soil / geo rasters or rainfall / soil files.');
 })();

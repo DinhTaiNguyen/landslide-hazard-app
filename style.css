@@ -134,9 +134,6 @@ body {
 
 .left-subpanel {
     display: none;
-    height: calc(100vh - 180px);
-    overflow: auto;
-    padding-right: 4px;
 }
 
 .left-subpanel.active {
@@ -182,25 +179,11 @@ body {
     margin-top: 14px;
 }
 
-.upload-section-title-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
 .upload-section-title {
     font-size: 13px;
     font-weight: 700;
+    margin-bottom: 8px;
     color: #dce7f8;
-}
-
-.view-toggle-wrap {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: #cfe0f5;
 }
 
 .compact-box {
@@ -327,8 +310,8 @@ body {
 
 .map-wrap {
     position: relative;
-    height: calc(100% - 320px);
-    min-height: 440px;
+    height: calc(100% - 280px);
+    min-height: 460px;
     border-radius: 14px;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, .06);
@@ -471,50 +454,13 @@ body {
 
 .bottom-dashboard {
     margin-top: 14px;
-    min-height: 250px;
 }
 
-.viz-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 10px;
-}
-
-.viz-tab {
-    border: 1px solid var(--line);
-    background: rgba(255, 255, 255, .03);
-    color: #cbd9eb;
-    padding: 10px 12px;
-    border-radius: 10px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.viz-tab.active {
-    background: rgba(60, 145, 255, .14);
-    color: #63aeff;
-}
-
-.viz-box {
+.mini-card {
     border: 1px solid var(--line);
     border-radius: 14px;
     background: rgba(255, 255, 255, .02);
     padding: 12px;
-    height: 270px;
-    overflow: auto;
-}
-
-.viz-panel {
-    display: none;
-}
-
-.viz-panel.active {
-    display: block;
-}
-
-.mini-card {
-    min-height: 220px;
 }
 
 .mini-card-title {
@@ -525,11 +471,11 @@ body {
 
 .rainfall-plot-grid {
     display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 12px;
 }
 
-.rainfall-plot-card,
-.soil-table-card {
+.rainfall-plot-card {
     border: 1px solid rgba(255, 255, 255, .08);
     border-radius: 12px;
     background: rgba(255, 255, 255, .02);
@@ -542,52 +488,71 @@ body {
     margin-bottom: 8px;
 }
 
-.chart-scroll {
-    overflow-x: auto;
-    overflow-y: hidden;
-    width: 100%;
-}
-
 .rainfall-chart {
+    width: 100%;
+    height: 220px;
+    background: linear-gradient(180deg, rgba(32, 48, 70, .24), rgba(14, 21, 31, .12));
+    border-radius: 10px;
     display: block;
-    height: 240px;
-}
-
-.soil-table-area {
-    display: grid;
-    gap: 12px;
-}
-
-.soil-table-scroll {
-    overflow: auto;
-    max-height: 420px;
-    max-width: 100%;
-}
-
-.soil-table {
-    width: max-content;
-    min-width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-}
-
-.soil-table th,
-.soil-table td {
-    border: 1px solid rgba(255, 255, 255, .12);
-    padding: 6px 10px;
-    text-align: left;
-}
-
-.soil-table th {
-    background: rgba(63, 156, 255, .12);
-    color: #e8f0fb;
-    position: sticky;
-    top: 0;
 }
 
 .empty-plot-note {
     color: var(--muted);
     font-size: 13px;
+}
+
+.layer-control-list {
+    display: grid;
+    gap: 8px;
+}
+
+.layer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .03);
+    border: 1px solid rgba(255, 255, 255, .05);
+}
+
+.layer-row-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.layer-name {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.layer-file {
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.layer-row-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.layer-toggle {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.layer-focus-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    background: #162131;
+    color: #dbe6f7;
+    cursor: pointer;
 }
 
 .console-block {
@@ -626,7 +591,8 @@ body {
     font-size: 12px;
 }
 
-.small-btn:hover {
+.small-btn:hover,
+.layer-focus-btn:hover {
     background: #1c2a40;
 }
 
@@ -675,10 +641,5 @@ body {
 
     .colorbar-panel {
         width: 160px;
-    }
-
-    .left-subpanel {
-        height: auto;
-        max-height: none;
     }
 }
