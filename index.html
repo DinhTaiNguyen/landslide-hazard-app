@@ -1,112 +1,124 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Landslide Hazard App</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Landslide Hazard App</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand-wrap">
-        <div class="brand-mark"></div>
-        <div>
-          <div class="brand-title">Landslide Hazard Mapping</div>
-          <div class="brand-subtitle">Netlify starter version</div>
-        </div>
-      </div>
-      <div class="top-actions">
-        <button id="resetViewBtn" class="small-btn" type="button">Reset view</button>
-        <button id="fitLayerBtn" class="small-btn" type="button">Fit layer</button>
-        <button id="clearLayerBtn" class="small-btn" type="button">Clear layer</button>
-      </div>
-    </header>
-
-    <aside class="left-panel card">
-      <div class="card-title">Data Input</div>
-
-      <input id="fileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-
-      <label for="fileInput" id="dropBox" class="dropbox">
-        <div class="dropbox-icon">⤒</div>
-        <div class="dropbox-title">Upload raster file</div>
-        <div class="dropbox-subtitle">Click or drag .asc, .tif, or .tiff here</div>
-      </label>
-
-      <div class="field-group">
-        <div class="field-label">Selected file</div>
-        <div id="selectedFile" class="field-box">None</div>
-      </div>
-
-    <div class="field-group">
-        <div class="field-label">Coordinate Reference System</div>
-        <select id="crsSelect" class="field-select">
-            <option value="auto">Auto detect</option>
-            <option value="EPSG:4326">EPSG:4326 - WGS84</option>
-            <option value="EPSG:3857">EPSG:3857 - Web Mercator</option>
-            <option value="EPSG:4549">EPSG:4549 - CGCS2000 / 3-degree Gauss-Kruger CM 120E</option>
-        </select>
-    </div>
-
-    <div class="field-group">
-        <div class="field-label">Raster statistics</div>
-        <div id="rasterStats" class="field-box">No raster loaded</div>
-    </div>
-
-      <div class="field-group">
-        <div class="field-label">Tips</div>
-        <div class="field-box small-text">
-          Start by uploading <strong>pit.asc</strong> first.<br />
-          This version displays ASC reliably and also supports TIFF preview.
-        </div>
-      </div>
-    </aside>
-
-    <main class="center-panel card">
-      <div class="card-title">Map Preview</div>
-        <div class="map-wrap">
-            <div id="map"></div>
-
-            <div class="map-overlay-top">
-                <div class="map-overlay-title">Landslide Hazard Prediction Map</div>
-                <div class="map-overlay-actions">
-                    <button class="map-chip active" type="button">Hazard</button>
-                    <button class="map-chip" type="button">Output</button>
+    <div class="app">
+        <header class="topbar">
+            <div class="brand-wrap">
+                <div class="brand-mark"></div>
+                <div>
+                    <div class="brand-title">LandSlide Predictor Pro</div>
+                    <div class="brand-subtitle">Netlify starter version</div>
                 </div>
             </div>
 
-            <div id="mapEmptyNote" class="map-empty-note">
-                Upload a raster to display it here
-                <small>The console on the right will show every step.</small>
+            <div class="top-actions">
+                <button id="resetViewBtn" class="small-btn" type="button">Reset view</button>
+                <button id="fitLayerBtn" class="small-btn" type="button">Fit layer</button>
+                <button id="clearLayerBtn" class="small-btn" type="button">Clear layer</button>
+            </div>
+        </header>
+
+        <aside class="left-panel card">
+            <div class="card-title">Data Input</div>
+
+            <input id="fileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+
+            <label for="fileInput" id="dropBox" class="dropbox">
+                <div class="dropbox-icon">⤒</div>
+                <div class="dropbox-title">Upload raster file</div>
+                <div class="dropbox-subtitle">Click or drag .asc, .tif, or .tiff here</div>
+            </label>
+
+            <div class="field-group">
+                <div class="field-label">Selected file</div>
+                <div id="selectedFile" class="field-box">None</div>
             </div>
 
-            <div id="colorbarPanel" class="colorbar-panel" style="display:none;">
-                <div class="colorbar-title">Raster Legend</div>
-                <div class="colorbar-wrap">
-                    <div class="colorbar-gradient"></div>
-                    <div class="colorbar-labels">
-                        <span id="colorbarMax">max</span>
-                        <span id="colorbarMid">mid</span>
-                        <span id="colorbarMin">min</span>
+            <div class="field-group">
+                <div class="field-label">Status</div>
+                <div id="uploadStatus" class="field-box">Waiting for file...</div>
+            </div>
+
+            <div class="field-group">
+                <div class="field-label">Coordinate Reference System</div>
+                <select id="crsSelect" class="field-select">
+                    <option value="auto">Auto detect</option>
+                    <option value="EPSG:4326">EPSG:4326 - WGS84</option>
+                    <option value="EPSG:3857">EPSG:3857 - Web Mercator</option>
+                    <option value="EPSG:4549">EPSG:4549 - CGCS2000 / 3-degree Gauss-Kruger CM 120E</option>
+                </select>
+            </div>
+
+            <div class="field-group">
+                <div class="field-label">Raster statistics</div>
+                <div id="rasterStats" class="field-box">No raster loaded</div>
+            </div>
+
+            <div class="field-group">
+                <div class="field-label">Tips</div>
+                <div class="field-box small-text">
+                    Start by uploading <strong>pit.asc</strong> first.<br />
+                    This version displays ASC reliably and also supports TIFF preview.<br /><br />
+                    For projected CRS such as <strong>EPSG:4549</strong>, this version currently shows a preview using
+                    fallback bounds unless the raster is already geographic.
+                </div>
+            </div>
+        </aside>
+
+        <main class="center-panel card">
+            <div class="card-title">Map Preview</div>
+
+            <div class="map-wrap">
+                <div id="map"></div>
+
+                <div class="map-overlay-top">
+                    <div class="map-overlay-title">Landslide Hazard Prediction Map</div>
+                    <div class="map-overlay-actions">
+                        <button class="map-chip active" type="button">Hazard</button>
+                        <button class="map-chip" type="button">Output</button>
+                    </div>
+                </div>
+
+                <div id="mapEmptyNote" class="map-empty-note">
+                    Upload a raster to display it here
+                    <small>The console on the right will show every step.</small>
+                </div>
+
+                <div id="colorbarPanel" class="colorbar-panel" style="display:none;">
+                    <div class="colorbar-title">Raster Legend</div>
+                    <div class="colorbar-wrap">
+                        <div class="colorbar-gradient"></div>
+                        <div class="colorbar-labels">
+                            <span id="colorbarMax">max</span>
+                            <span id="colorbarMid">mid</span>
+                            <span id="colorbarMin">min</span>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </main>
+        </main>
 
-    <aside class="right-panel card">
-      <div class="card-title">Console</div>
-      <div class="console-toolbar">
-        <button id="clearConsoleBtn" class="small-btn" type="button">Clear</button>
-      </div>
-      <div id="consoleContent" class="console-content"></div>
-    </aside>
-  </div>
+        <aside class="right-panel card">
+            <div class="card-title">Console</div>
+            <div class="console-toolbar">
+                <button id="clearConsoleBtn" class="small-btn" type="button">Clear</button>
+            </div>
+            <div id="consoleContent" class="console-content"></div>
+        </aside>
+    </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>
-  <script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>
+    <script src="script.js"></script>
 </body>
+
 </html>

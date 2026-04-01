@@ -46,20 +46,18 @@
 
   function updateColorbar(min, max) {
     if (!Number.isFinite(min) || !Number.isFinite(max)) return;
-
     const mid = (min + max) / 2;
-    colorbarMin.textContent = min.toFixed(2);
+    colorbarMin.textContent = max.toFixed(2);
     colorbarMid.textContent = mid.toFixed(2);
-    colorbarMax.textContent = max.toFixed(2);
+    colorbarMax.textContent = min.toFixed(2);
     colorbarPanel.style.display = 'block';
-
     addConsoleLine('info', 'Color bar updated');
   }
 
   function hideColorbar() {
     colorbarPanel.style.display = 'none';
   }
-    
+
   function clearConsole() {
     consoleContent.innerHTML = '';
     addConsoleLine('info', 'Console cleared');
@@ -235,7 +233,6 @@
 
     let bounds;
     let crsText = 'Auto detect';
-
     const selectedCRS = crsSelect ? crsSelect.value : 'auto';
 
     if (selectedCRS === 'EPSG:4326' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) {
@@ -298,6 +295,8 @@
     const url = canvas.toDataURL('image/png');
 
     let bounds = [[-20, -20], [20, 20]];
+    let crsText = 'TIFF preview';
+
     try {
       const bbox = image.getBoundingBox();
       if (
@@ -308,6 +307,7 @@
         bbox[3] >= -90 && bbox[3] <= 90
       ) {
         bounds = [[bbox[1], bbox[0]], [bbox[3], bbox[2]]];
+        crsText = 'Geographic TIFF bbox';
         addConsoleLine('info', 'TIFF geographic bounding box detected');
       } else {
         addConsoleLine('warn', 'TIFF bbox not geographic; using fallback bounds');
@@ -323,7 +323,7 @@
     mapEmptyNote.style.display = 'none';
     setStatus('Loaded ' + file.name);
     updateColorbar(min, max);
-    updateRasterStats(min, max, width, height, 'TIFF preview');
+    updateRasterStats(min, max, width, height, crsText);
     addConsoleLine('info', 'TIFF displayed successfully');
   }
 
@@ -387,6 +387,7 @@
 
   clearConsoleBtn.addEventListener('click', clearConsole);
   fitLayerBtn.addEventListener('click', fitCurrentLayer);
+
   clearLayerBtn.addEventListener('click', function () {
     clearCurrentLayer();
     mapEmptyNote.style.display = 'block';
@@ -395,6 +396,7 @@
     setStatus('Layer cleared');
     addConsoleLine('warn', 'Raster layer cleared');
   });
+
   resetViewBtn.addEventListener('click', resetMapView);
 
   initMap();
