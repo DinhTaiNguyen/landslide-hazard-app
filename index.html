@@ -38,7 +38,7 @@
                 <button class="panel-tab" type="button" data-panel="geoPanel">Geo</button>
             </div>
 
-            <!-- DEM / Raster Panel -->
+            <!-- DEM PANEL -->
             <div id="demPanel" class="left-subpanel active">
                 <div class="field-group">
                     <div class="field-label">Coordinate Reference System</div>
@@ -51,18 +51,16 @@
                     </select>
                 </div>
 
-                <div class="field-group">
-                    <div class="field-label">Placement mode</div>
-                    <select id="placementMode" class="field-select">
-                        <option value="fit">Fit map to active raster</option>
-                        <option value="keep">Keep current map view</option>
-                    </select>
-                </div>
-
                 <div class="upload-section">
-                    <div class="upload-section-title">DEM Data</div>
+                    <div class="upload-section-title-row">
+                        <span class="upload-section-title">DEM Data</span>
+                        <label class="view-toggle-wrap">
+                            <input id="demViewToggle" type="checkbox" checked disabled />
+                            <span>View</span>
+                        </label>
+                    </div>
                     <input id="demFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="demFileInput" id="demDropBox" class="dropbox">
+                    <label for="demFileInput" class="dropbox">
                         <div class="dropbox-icon">⤒</div>
                         <div class="dropbox-title">Upload DEM raster</div>
                         <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
@@ -71,9 +69,32 @@
                 </div>
 
                 <div class="upload-section">
-                    <div class="upload-section-title">Soil Type Map</div>
+                    <div class="upload-section-title-row">
+                        <span class="upload-section-title">Slope Map</span>
+                        <label class="view-toggle-wrap">
+                            <input id="slopeViewToggle" type="checkbox" checked disabled />
+                            <span>View</span>
+                        </label>
+                    </div>
+                    <input id="slopeFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                    <label for="slopeFileInput" class="dropbox">
+                        <div class="dropbox-icon">⤒</div>
+                        <div class="dropbox-title">Upload Slope raster</div>
+                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
+                    </label>
+                    <div id="slopeSelectedFile" class="field-box compact-box">None</div>
+                </div>
+
+                <div class="upload-section">
+                    <div class="upload-section-title-row">
+                        <span class="upload-section-title">Soil Type Map</span>
+                        <label class="view-toggle-wrap">
+                            <input id="soilTypeViewToggle" type="checkbox" checked disabled />
+                            <span>View</span>
+                        </label>
+                    </div>
                     <input id="soilTypeFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="soilTypeFileInput" id="soilTypeDropBox" class="dropbox">
+                    <label for="soilTypeFileInput" class="dropbox">
                         <div class="dropbox-icon">⤒</div>
                         <div class="dropbox-title">Upload Soil Type raster</div>
                         <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
@@ -82,9 +103,15 @@
                 </div>
 
                 <div class="upload-section">
-                    <div class="upload-section-title">Soil Thickness Map</div>
+                    <div class="upload-section-title-row">
+                        <span class="upload-section-title">Soil Thickness Map</span>
+                        <label class="view-toggle-wrap">
+                            <input id="soilThicknessViewToggle" type="checkbox" checked disabled />
+                            <span>View</span>
+                        </label>
+                    </div>
                     <input id="soilThicknessFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="soilThicknessFileInput" id="soilThicknessDropBox" class="dropbox">
+                    <label for="soilThicknessFileInput" class="dropbox">
                         <div class="dropbox-icon">⤒</div>
                         <div class="dropbox-title">Upload Soil Thickness raster</div>
                         <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
@@ -101,16 +128,9 @@
                     <div class="field-label">Active layer statistics</div>
                     <div id="rasterStats" class="field-box">No raster loaded</div>
                 </div>
-
-                <div class="field-group">
-                    <div class="field-label">Layer visibility</div>
-                    <div id="layerControlList" class="field-box layer-control-list">
-                        No layers loaded
-                    </div>
-                </div>
             </div>
 
-            <!-- Rainfall Panel -->
+            <!-- RAINFALL PANEL -->
             <div id="rainfallPanel" class="left-subpanel">
                 <div class="field-group">
                     <div class="field-label">How many rainfall files?</div>
@@ -135,24 +155,80 @@
                 <div id="rainfallUploadContainer"></div>
             </div>
 
-            <!-- Soil Panel -->
+            <!-- SOIL PANEL -->
             <div id="soilPanel" class="left-subpanel">
                 <div class="field-group">
-                    <div class="field-label">Soil panel</div>
-                    <div class="field-box small-text">
-                        This tab is reserved for future soil property controls such as cohesion, friction angle, and
-                        permeability.
+                    <div class="field-label">How many soil files?</div>
+                    <div class="inline-controls">
+                        <input id="soilCountInput" class="number-input" type="number" min="1" value="1" />
+                        <button id="generateSoilInputsBtn" class="small-btn" type="button">Generate</button>
                     </div>
                 </div>
+
+                <div class="field-group">
+                    <div class="field-label">Soil file instructions</div>
+                    <div class="field-box small-text">
+                        File format assumption:<br>
+                        - 1st row = column names<br>
+                        - From 2nd row = value of each soil layer<br>
+                        - CSV, TXT, comma/tab/space separated
+                    </div>
+                </div>
+
+                <div id="soilUploadContainer"></div>
             </div>
 
-            <!-- Geo Panel -->
+            <!-- GEO PANEL -->
             <div id="geoPanel" class="left-subpanel">
-                <div class="field-group">
-                    <div class="field-label">Geo-environmental panel</div>
-                    <div class="field-box small-text">
-                        This tab is reserved for future land use, vegetation, lithology, and geological controls.
+                <div class="upload-section">
+                    <div class="upload-section-title-row">
+                        <span class="upload-section-title">Land Use Map</span>
+                        <label class="view-toggle-wrap">
+                            <input id="landUseViewToggle" type="checkbox" checked disabled />
+                            <span>View</span>
+                        </label>
                     </div>
+                    <input id="landUseFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                    <label for="landUseFileInput" class="dropbox">
+                        <div class="dropbox-icon">⤒</div>
+                        <div class="dropbox-title">Upload Land Use raster</div>
+                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
+                    </label>
+                    <div id="landUseSelectedFile" class="field-box compact-box">None</div>
+                </div>
+
+                <div class="upload-section">
+                    <div class="upload-section-title-row">
+                        <span class="upload-section-title">Vegetation Map</span>
+                        <label class="view-toggle-wrap">
+                            <input id="vegetationViewToggle" type="checkbox" checked disabled />
+                            <span>View</span>
+                        </label>
+                    </div>
+                    <input id="vegetationFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                    <label for="vegetationFileInput" class="dropbox">
+                        <div class="dropbox-icon">⤒</div>
+                        <div class="dropbox-title">Upload Vegetation raster</div>
+                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
+                    </label>
+                    <div id="vegetationSelectedFile" class="field-box compact-box">None</div>
+                </div>
+
+                <div class="upload-section">
+                    <div class="upload-section-title-row">
+                        <span class="upload-section-title">Lithology Map</span>
+                        <label class="view-toggle-wrap">
+                            <input id="lithologyViewToggle" type="checkbox" checked disabled />
+                            <span>View</span>
+                        </label>
+                    </div>
+                    <input id="lithologyFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                    <label for="lithologyFileInput" class="dropbox">
+                        <div class="dropbox-icon">⤒</div>
+                        <div class="dropbox-title">Upload Lithology raster</div>
+                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
+                    </label>
+                    <div id="lithologySelectedFile" class="field-box compact-box">None</div>
                 </div>
             </div>
         </aside>
@@ -179,7 +255,7 @@
 
                 <div id="mapEmptyNote" class="map-empty-note">
                     Upload a raster to display it here
-                    <small>Use layer on/off toggles to switch between uploaded maps.</small>
+                    <small>Use the View checkboxes to turn layers on and off.</small>
                 </div>
 
                 <div id="colorbarPanel" class="colorbar-panel" style="display:none;">
@@ -196,10 +272,27 @@
             </div>
 
             <div class="bottom-dashboard">
-                <div class="mini-card">
-                    <div class="mini-card-title">Rainfall Intensity</div>
-                    <div id="rainfallPlotArea" class="rainfall-plot-grid">
-                        <div class="empty-plot-note">No rainfall files uploaded yet</div>
+                <div class="viz-tabs">
+                    <button class="viz-tab active" type="button" data-viz="rainfallVizPanel">Rainfall input
+                        visualise</button>
+                    <button class="viz-tab" type="button" data-viz="soilVizPanel">Soil input visualise</button>
+                </div>
+
+                <div id="rainfallVizPanel" class="viz-panel active">
+                    <div class="mini-card">
+                        <div class="mini-card-title">Rainfall Intensity</div>
+                        <div id="rainfallPlotArea" class="rainfall-plot-grid">
+                            <div class="empty-plot-note">No rainfall files uploaded yet</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="soilVizPanel" class="viz-panel">
+                    <div class="mini-card">
+                        <div class="mini-card-title">Soil Input Table</div>
+                        <div id="soilTableArea" class="soil-table-area">
+                            <div class="empty-plot-note">No soil files uploaded yet</div>
+                        </div>
                     </div>
                 </div>
             </div>
