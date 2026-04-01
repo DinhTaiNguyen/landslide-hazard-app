@@ -80,6 +80,11 @@ body {
     margin-top: 2px;
 }
 
+.top-actions {
+    display: flex;
+    gap: 8px;
+}
+
 .card {
     border: 1px solid rgba(95, 150, 230, .18);
     border-radius: var(--radius);
@@ -230,8 +235,7 @@ body {
 }
 
 .field-select,
-.number-input,
-.form-field input {
+.number-input {
     width: 100%;
     min-height: 40px;
     border-radius: 10px;
@@ -254,44 +258,71 @@ body {
     color: #d7e3f2;
 }
 
+.info-card,
+.status-card,
 .config-card {
-    margin-top: 10px;
+    margin-top: 16px;
     border: 1px solid var(--line);
     border-radius: 14px;
     background: rgba(255, 255, 255, .02);
     padding: 12px;
 }
 
+.info-card-title,
+.status-card-title,
 .config-card-title {
     font-weight: 700;
     margin-bottom: 10px;
 }
 
-.right-scroll-panel {
-    max-height: 420px;
-    overflow: auto;
-    padding-right: 6px;
-}
-
-.config-section-title {
-    margin-top: 12px;
-    margin-bottom: 8px;
+.status-line {
     font-size: 13px;
+    color: #d7e3f2;
+}
+
+.good-text {
+    color: #63e291;
     font-weight: 700;
-    color: #7fc2ff;
 }
 
-.form-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
+.status-bar {
+    margin-top: 10px;
+    height: 8px;
+    border-radius: 99px;
+    background: #243547;
+    overflow: hidden;
 }
 
-.form-field label {
+.status-bar span {
     display: block;
-    margin-bottom: 5px;
+    width: 78%;
+    height: 100%;
+    background: linear-gradient(90deg, #3fe16e, #219f54);
+}
+
+.fake-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.fake-tab {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .03);
+    border: 1px solid rgba(255, 255, 255, .06);
     font-size: 12px;
-    color: #ccd8e8;
+    font-weight: 700;
+    color: #cbd9eb;
+}
+
+.fake-tab.active {
+    background: rgba(60, 145, 255, .14);
+    color: #63aeff;
+}
+
+.mini-setting {
+    margin-bottom: 10px;
 }
 
 .map-wrap {
@@ -309,43 +340,68 @@ body {
     background: #07101a;
 }
 
-.map-management-bar {
+.map-overlay-top {
     position: absolute;
     top: 14px;
-    left: 14px;
-    right: 14px;
+    left: 60px;
+    right: 18px;
     z-index: 700;
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
+    align-items: center;
+    padding: 10px 14px;
     border-radius: 12px;
     background: rgba(15, 22, 34, .72);
     border: 1px solid rgba(255, 255, 255, .08);
     backdrop-filter: blur(6px);
 }
 
-.map-style-switcher,
-.map-action-buttons {
+.map-overlay-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #edf4ff;
+}
+
+.map-overlay-actions {
     display: flex;
     gap: 8px;
-    flex-wrap: wrap;
 }
 
-.map-style-btn,
-.small-btn {
-    background: #162131;
+.map-chip {
+    border: none;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .06);
     color: #dbe6f7;
-    border: 1px solid rgba(255, 255, 255, .08);
-    border-radius: 8px;
-    padding: 7px 11px;
+    font-weight: 700;
     cursor: pointer;
-    font-size: 12px;
 }
 
-.map-style-btn.active {
+.map-chip.active {
     background: rgba(63, 156, 255, .18);
     color: #7fc2ff;
+}
+
+.map-toolbar {
+    position: absolute;
+    top: 72px;
+    left: 14px;
+    z-index: 700;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.map-tool {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(13, 20, 30, .88);
+    color: #d8e4f4;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
 }
 
 .map-empty-note {
@@ -415,7 +471,7 @@ body {
 
 .bottom-dashboard {
     margin-top: 14px;
-    min-height: 260px;
+    min-height: 250px;
 }
 
 .viz-tabs {
@@ -445,7 +501,7 @@ body {
     border-radius: 14px;
     background: rgba(255, 255, 255, .02);
     padding: 12px;
-    height: 280px;
+    height: 270px;
     overflow: auto;
 }
 
@@ -494,7 +550,6 @@ body {
 
 .rainfall-chart {
     display: block;
-    width: 100%;
     height: 240px;
 }
 
@@ -549,7 +604,7 @@ body {
 
 .console-content {
     height: calc(100% - 42px);
-    min-height: 300px;
+    min-height: 420px;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, .08);
     background: #0a1017;
@@ -561,8 +616,17 @@ body {
     font-size: 12px;
 }
 
-.small-btn:hover,
-.map-style-btn:hover {
+.small-btn {
+    background: #162131;
+    color: #dbe6f7;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 8px;
+    padding: 7px 11px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.small-btn:hover {
     background: #1c2a40;
 }
 
@@ -604,9 +668,13 @@ body {
         min-height: 260px;
     }
 
-    .map-management-bar {
-        flex-direction: column;
-        align-items: flex-start;
+    .map-overlay-top {
+        left: 14px;
+        right: 14px;
+    }
+
+    .colorbar-panel {
+        width: 160px;
     }
 
     .left-subpanel {

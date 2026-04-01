@@ -20,6 +20,12 @@
                     <div class="brand-subtitle">Multi-layer raster and rainfall dashboard</div>
                 </div>
             </div>
+
+            <div class="top-actions">
+                <button id="resetViewBtn" class="small-btn" type="button">Reset view</button>
+                <button id="fitLayerBtn" class="small-btn" type="button">Fit active layer</button>
+                <button id="clearLayerBtn" class="small-btn" type="button">Clear all layers</button>
+            </div>
         </header>
 
         <aside class="left-panel card">
@@ -201,19 +207,18 @@
             <div class="map-wrap">
                 <div id="map"></div>
 
-                <div class="map-management-bar">
-                    <div class="map-style-switcher">
-                        <button class="map-style-btn active" type="button" data-basemap="osm">OpenStreetMap</button>
-                        <button class="map-style-btn" type="button" data-basemap="topo">Topographic</button>
-                        <button class="map-style-btn" type="button" data-basemap="terrain">Terrain</button>
-                        <button class="map-style-btn" type="button" data-basemap="satellite">Satellite</button>
+                <div class="map-overlay-top">
+                    <div class="map-overlay-title">Hazard Preview</div>
+                    <div class="map-overlay-actions">
+                        <button class="map-chip active" type="button">Hazard</button>
+                        <button class="map-chip" type="button">Output</button>
                     </div>
+                </div>
 
-                    <div class="map-action-buttons">
-                        <button id="resetViewBtnInside" class="small-btn" type="button">Reset view</button>
-                        <button id="fitLayerBtnInside" class="small-btn" type="button">Fit active layer</button>
-                        <button id="clearLayerBtnInside" class="small-btn" type="button">Clear all layers</button>
-                    </div>
+                <div class="map-toolbar">
+                    <button id="zoomInMapBtn" class="map-tool" type="button">+</button>
+                    <button id="zoomOutMapBtn" class="map-tool" type="button">−</button>
+                    <button id="fitLayerMapBtn" class="map-tool" type="button">⛶</button>
                 </div>
 
                 <div id="mapEmptyNote" class="map-empty-note">
@@ -266,83 +271,27 @@
         <aside class="right-panel card">
             <div class="card-title">Model / Runtime Panel</div>
 
-            <div class="config-card right-scroll-panel">
-                <div class="config-card-title">GeoTOP Configuration</div>
-
-                <div class="config-section-title">Configuration</div>
-                <div class="form-grid">
-                    <div class="form-field">
-                        <label>TimeStepEnergyAndWater</label>
-                        <input type="number" value="3600" />
-                    </div>
-                    <div class="form-field">
-                        <label>InitDateDDMMYYYYhhmm</label>
-                        <input type="text" value="07/08/2011 11:00" />
-                    </div>
-                    <div class="form-field">
-                        <label>EndDateDDMMYYYYhhmm</label>
-                        <input type="text" value="08/08/2011 04:00" />
-                    </div>
-                    <div class="form-field">
-                        <label>EnergyBalance</label>
-                        <input type="number" value="0" />
-                    </div>
-                    <div class="form-field">
-                        <label>WaterBalance</label>
-                        <input type="number" value="1" />
-                    </div>
-                    <div class="form-field">
-                        <label>PointSim</label>
-                        <input type="number" value="0" />
-                    </div>
+            <div class="config-card">
+                <div class="config-card-title">Model Configuration</div>
+                <div class="fake-tabs">
+                    <span class="fake-tab active">GeoTop</span>
+                    <span class="fake-tab">FORM</span>
+                    <span class="fake-tab">ML</span>
                 </div>
 
-                <div class="config-section-title">Geography</div>
-                <div class="form-grid">
-                    <div class="form-field">
-                        <label>Latitude</label>
-                        <input type="number" step="0.001" value="29.717" />
-                    </div>
-                    <div class="form-field">
-                        <label>Longitude</label>
-                        <input type="number" step="0.001" value="119.967" />
-                    </div>
+                <div class="mini-setting">
+                    <div class="field-label">Hydrological Model</div>
+                    <div class="field-box">Hydrological Model</div>
                 </div>
 
-                <div class="config-section-title">Meteo Stations</div>
-                <div class="form-grid">
-                    <div class="form-field">
-                        <label>NumberOfMeteoStations</label>
-                        <input type="number" value="1" />
-                    </div>
-                    <div class="form-field">
-                        <label>MeteoStationCoordinateX</label>
-                        <input type="number" value="206578" />
-                    </div>
-                    <div class="form-field">
-                        <label>MeteoStationCoordinateY</label>
-                        <input type="number" value="3291279" />
-                    </div>
-                    <div class="form-field">
-                        <label>MeteoStationElevation</label>
-                        <input type="number" value="1500" />
-                    </div>
-                    <div class="form-field">
-                        <label>StandardTimeSimulation</label>
-                        <input type="number" value="1" />
-                    </div>
+                <div class="mini-setting">
+                    <div class="field-label">Boundary Conditions</div>
+                    <div class="field-box">Inflow / Outflow</div>
                 </div>
 
-                <div class="config-section-title">Soil / Water</div>
-                <div class="form-grid">
-                    <div class="form-field">
-                        <label>SoilLayerTypes</label>
-                        <input type="number" value="3" />
-                    </div>
-                    <div class="form-field">
-                        <label>InitWaterTableDepth</label>
-                        <input type="number" value="3300" />
-                    </div>
+                <div class="mini-setting">
+                    <div class="field-label">ML Calibration</div>
+                    <div class="field-box">Random Forest / SVM</div>
                 </div>
             </div>
 
