@@ -17,14 +17,14 @@
                 <div class="brand-mark"></div>
                 <div>
                     <div class="brand-title">LandSlide Predictor Pro</div>
-                    <div class="brand-subtitle">Raster upload, CRS transform, and preview</div>
+                    <div class="brand-subtitle">Multi-layer raster and rainfall dashboard</div>
                 </div>
             </div>
 
             <div class="top-actions">
                 <button id="resetViewBtn" class="small-btn" type="button">Reset view</button>
-                <button id="fitLayerBtn" class="small-btn" type="button">Fit layer</button>
-                <button id="clearLayerBtn" class="small-btn" type="button">Clear layer</button>
+                <button id="fitLayerBtn" class="small-btn" type="button">Fit active layer</button>
+                <button id="clearLayerBtn" class="small-btn" type="button">Clear all layers</button>
             </div>
         </header>
 
@@ -32,31 +32,14 @@
             <div class="card-title">Data Input</div>
 
             <div class="panel-tabs">
-                <button class="panel-tab active" type="button">DEM Data</button>
-                <button class="panel-tab" type="button">Rainfall</button>
-                <button class="panel-tab" type="button">Soil</button>
-                <button class="panel-tab" type="button">Geo</button>
+                <button class="panel-tab active" type="button" data-panel="demPanel">DEM Data</button>
+                <button class="panel-tab" type="button" data-panel="rainfallPanel">Rainfall</button>
+                <button class="panel-tab" type="button" data-panel="soilPanel">Soil</button>
+                <button class="panel-tab" type="button" data-panel="geoPanel">Geo</button>
             </div>
 
-            <input id="fileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-
-            <label for="fileInput" id="dropBox" class="dropbox">
-                <div class="dropbox-icon">⤒</div>
-                <div class="dropbox-title">Upload raster file</div>
-                <div class="dropbox-subtitle">Click or drag .asc, .tif, or .tiff here</div>
-            </label>
-
-            <div class="field-grid">
-                <div class="field-group">
-                    <div class="field-label">Selected file</div>
-                    <div id="selectedFile" class="field-box">None</div>
-                </div>
-
-                <div class="field-group">
-                    <div class="field-label">Status</div>
-                    <div id="uploadStatus" class="field-box">Waiting for file...</div>
-                </div>
-
+            <!-- DEM / Raster Panel -->
+            <div id="demPanel" class="left-subpanel active">
                 <div class="field-group">
                     <div class="field-label">Coordinate Reference System</div>
                     <select id="crsSelect" class="field-select">
@@ -71,29 +54,106 @@
                 <div class="field-group">
                     <div class="field-label">Placement mode</div>
                     <select id="placementMode" class="field-select">
-                        <option value="fit">Fit map to raster</option>
+                        <option value="fit">Fit map to active raster</option>
                         <option value="keep">Keep current map view</option>
                     </select>
                 </div>
-            </div>
 
-            <div class="field-group">
-                <div class="field-label">Raster statistics</div>
-                <div id="rasterStats" class="field-box">No raster loaded</div>
-            </div>
+                <div class="upload-section">
+                    <div class="upload-section-title">DEM Data</div>
+                    <input id="demFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                    <label for="demFileInput" id="demDropBox" class="dropbox">
+                        <div class="dropbox-icon">⤒</div>
+                        <div class="dropbox-title">Upload DEM raster</div>
+                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
+                    </label>
+                    <div id="demSelectedFile" class="field-box compact-box">None</div>
+                </div>
 
-            <div class="info-card">
-                <div class="info-card-title">How CRS placement works</div>
-                <div class="small-text">
-                    If your ASC is in projected coordinates like EPSG:4549, choose that CRS first, then upload.
-                    The app will transform the raster corner coordinates to WGS84 and place the overlay on the map.
+                <div class="upload-section">
+                    <div class="upload-section-title">Soil Type Map</div>
+                    <input id="soilTypeFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                    <label for="soilTypeFileInput" id="soilTypeDropBox" class="dropbox">
+                        <div class="dropbox-icon">⤒</div>
+                        <div class="dropbox-title">Upload Soil Type raster</div>
+                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
+                    </label>
+                    <div id="soilTypeSelectedFile" class="field-box compact-box">None</div>
+                </div>
+
+                <div class="upload-section">
+                    <div class="upload-section-title">Soil Thickness Map</div>
+                    <input id="soilThicknessFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                    <label for="soilThicknessFileInput" id="soilThicknessDropBox" class="dropbox">
+                        <div class="dropbox-icon">⤒</div>
+                        <div class="dropbox-title">Upload Soil Thickness raster</div>
+                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
+                    </label>
+                    <div id="soilThicknessSelectedFile" class="field-box compact-box">None</div>
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label">Status</div>
+                    <div id="uploadStatus" class="field-box">Waiting for raster upload...</div>
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label">Active layer statistics</div>
+                    <div id="rasterStats" class="field-box">No raster loaded</div>
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label">Layer visibility</div>
+                    <div id="layerControlList" class="field-box layer-control-list">
+                        No layers loaded
+                    </div>
                 </div>
             </div>
 
-            <div class="status-card">
-                <div class="status-card-title">Status</div>
-                <div class="status-line">Data integrity: <span class="good-text">Ready</span></div>
-                <div class="status-bar"><span></span></div>
+            <!-- Rainfall Panel -->
+            <div id="rainfallPanel" class="left-subpanel">
+                <div class="field-group">
+                    <div class="field-label">How many rainfall files?</div>
+                    <div class="inline-controls">
+                        <input id="rainfallCountInput" class="number-input" type="number" min="1" value="1" />
+                        <button id="generateRainfallInputsBtn" class="small-btn" type="button">Generate</button>
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label">Rainfall file instructions</div>
+                    <div class="field-box small-text">
+                        File format assumption:<br>
+                        - 1st row = column names<br>
+                        - Column 1 = X axis<br>
+                        - Column 2 = Y axis<br>
+                        - Data starts from row 2<br><br>
+                        Example: Date, Rainfall Intensity
+                    </div>
+                </div>
+
+                <div id="rainfallUploadContainer"></div>
+            </div>
+
+            <!-- Soil Panel -->
+            <div id="soilPanel" class="left-subpanel">
+                <div class="field-group">
+                    <div class="field-label">Soil panel</div>
+                    <div class="field-box small-text">
+                        This tab is reserved for future soil property controls such as cohesion, friction angle, and
+                        permeability.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Geo Panel -->
+            <div id="geoPanel" class="left-subpanel">
+                <div class="field-group">
+                    <div class="field-label">Geo-environmental panel</div>
+                    <div class="field-box small-text">
+                        This tab is reserved for future land use, vegetation, lithology, and geological controls.
+                    </div>
+                </div>
             </div>
         </aside>
 
@@ -119,7 +179,7 @@
 
                 <div id="mapEmptyNote" class="map-empty-note">
                     Upload a raster to display it here
-                    <small>Choose the correct CRS first if your raster uses projected coordinates.</small>
+                    <small>Use layer on/off toggles to switch between uploaded maps.</small>
                 </div>
 
                 <div id="colorbarPanel" class="colorbar-panel" style="display:none;">
@@ -131,6 +191,15 @@
                             <span id="colorbarMid">mid</span>
                             <span id="colorbarMin">min</span>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bottom-dashboard">
+                <div class="mini-card">
+                    <div class="mini-card-title">Rainfall Intensity</div>
+                    <div id="rainfallPlotArea" class="rainfall-plot-grid">
+                        <div class="empty-plot-note">No rainfall files uploaded yet</div>
                     </div>
                 </div>
             </div>

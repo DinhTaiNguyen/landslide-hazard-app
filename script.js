@@ -1,7 +1,16 @@
 (function () {
-  const fileInput = document.getElementById('fileInput');
-  const dropBox = document.getElementById('dropBox');
-  const selectedFile = document.getElementById('selectedFile');
+  const fileInputMap = {
+    dem: document.getElementById('demFileInput'),
+    soilType: document.getElementById('soilTypeFileInput'),
+    soilThickness: document.getElementById('soilThicknessFileInput')
+  };
+
+  const selectedFileMap = {
+    dem: document.getElementById('demSelectedFile'),
+    soilType: document.getElementById('soilTypeSelectedFile'),
+    soilThickness: document.getElementById('soilThicknessSelectedFile')
+  };
+
   const uploadStatus = document.getElementById('uploadStatus');
   const mapEmptyNote = document.getElementById('mapEmptyNote');
   const consoleContent = document.getElementById('consoleContent');
@@ -20,10 +29,20 @@
   const colorbarMin = document.getElementById('colorbarMin');
   const colorbarMid = document.getElementById('colorbarMid');
   const colorbarMax = document.getElementById('colorbarMax');
+  const layerControlList = document.getElementById('layerControlList');
+
+  const rainfallCountInput = document.getElementById('rainfallCountInput');
+  const generateRainfallInputsBtn = document.getElementById('generateRainfallInputsBtn');
+  const rainfallUploadContainer = document.getElementById('rainfallUploadContainer');
+  const rainfallPlotArea = document.getElementById('rainfallPlotArea');
+
+  const panelTabs = document.querySelectorAll('.panel-tab');
+  const subPanels = document.querySelectorAll('.left-subpanel');
 
   let map = null;
-  let currentRasterLayer = null;
-  let currentRasterBounds = null;
+  let rasterLayers = {};
+  let activeLayerKey = null;
+  let layerOrder = [];
 
   if (typeof proj4 !== 'undefined') {
     proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs +type=crs');
@@ -47,8 +66,9 @@
     uploadStatus.textContent = message;
   }
 
-  function updateRasterStats(min, max, width, height, crsText) {
+  function updateRasterStats(min, max, width, height, crsText, layerName) {
     rasterStats.innerHTML =
+      'Layer: ' + layerName + '<br>' +
       'Min: ' + min.toFixed(2) + '<br>' +
       'Max: ' + max.toFixed(2) + '<br>' +
       'Size: ' + width + ' × ' + height + '<br>' +
@@ -97,20 +117,34 @@
     addConsoleLine('info', 'Map initialized');
   }
 
-  function clearCurrentLayer() {
-    if (currentRasterLayer && map) {
-      map.removeLayer(currentRasterLayer);
-    }
-    currentRasterLayer = null;
-    currentRasterBounds = null;
+  function clearAllLayers() {
+    Object.keys(rasterLayers).forEach(key => {
+      const layerObj = rasterLayers[key];
+      if (layerObj && layerObj.layer && map.hasLayer(layerObj.layer)) {
+        map.removeLayer(layerObj.layer);
+      }
+    });
+
+    rasterLayers = {};
+    layerOrder = [];
+    activeLayerKey = null;
+
+    mapEmptyNote.style.display = 'block';
+    hideColorbar();
+    rasterStats.textContent = 'No raster loaded';
+    layerControlList.textContent = 'No layers loaded';
   }
 
-  function fitCurrentLayer() {
-    if (map && currentRasterBounds) {
-      map.fitBounds(currentRasterBounds, { padding: [20, 20] });
-      addConsoleLine('info', 'Map fit to raster bounds');
-    } else {
-      addConsoleLine('warn', 'No raster layer to fit');
+  function fitActiveLayer() {
+    if (!activeLayerKey || !rasterLayers[activeLayerKey]) {
+      addConsoleLine('warn', 'No active layer to fit');
+      return;
+    }
+
+    const bounds = rasterLayers[activeLayerKey].bounds;
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [20, 20] });
+      addConsoleLine('info', 'Map fit to active layer');
     }
   }
 
@@ -285,9 +319,131 @@
     throw new Error('Unsupported CRS selection: ' + selectedCRS);
   }
 
-  function addAscLayer(asc, fileName) {
-    clearCurrentLayer();
+  function refreshLayerControlList() {
+    if (layerOrder.length === 0) {
+      layerControlList.textContent = 'No layers loaded';
+      return;
+    }
 
+    layerControlList.innerHTML = '';
+
+    layerOrder.forEach(layerKey => {
+      const layerObj = rasterLayers[layerKey];
+      if (!layerObj) return;
+
+      const row = document.createElement('div');
+      row.className = 'layer-row';
+
+      const left = document.createElement('div');
+      left.className = 'layer-row-left';
+
+      const name = document.createElement('div');
+      name.className = 'layer-name';
+      name.textContent = layerObj.label;
+
+      const file = document.createElement('div');
+      file.className = 'layer-file';
+      file.textContent = layerObj.fileName;
+
+      left.appendChild(name);
+      left.appendChild(file);
+
+      const right = document.createElement('div');
+      right.className = 'layer-row-right';
+
+      const toggle = document.createElement('input');
+      toggle.type = 'checkbox';
+      toggle.className = 'layer-toggle';
+      toggle.checked = layerObj.visible;
+
+      toggle.addEventListener('change', function () {
+        layerObj.visible = toggle.checked;
+
+        if (toggle.checked) {
+          layerObj.layer.addTo(map);
+          activeLayerKey = layerKey;
+          mapEmptyNote.style.display = 'none';
+          updateColorbar(layerObj.min, layerObj.max);
+          updateRasterStats(layerObj.min, layerObj.max, layerObj.width, layerObj.height, layerObj.crsText, layerObj.label);
+          addConsoleLine('info', layerObj.label + ' turned on');
+        } else {
+          if (map.hasLayer(layerObj.layer)) {
+            map.removeLayer(layerObj.layer);
+          }
+          addConsoleLine('warn', layerObj.label + ' turned off');
+
+          if (activeLayerKey === layerKey) {
+            const stillVisible = layerOrder.find(k => rasterLayers[k] && rasterLayers[k].visible);
+            if (stillVisible) {
+              activeLayerKey = stillVisible;
+              const active = rasterLayers[stillVisible];
+              updateColorbar(active.min, active.max);
+              updateRasterStats(active.min, active.max, active.width, active.height, active.crsText, active.label);
+            } else {
+              activeLayerKey = null;
+              hideColorbar();
+              rasterStats.textContent = 'No raster loaded';
+              mapEmptyNote.style.display = 'block';
+            }
+          }
+        }
+      });
+
+      const focusBtn = document.createElement('button');
+      focusBtn.className = 'layer-focus-btn';
+      focusBtn.textContent = 'Focus';
+
+      focusBtn.addEventListener('click', function () {
+        activeLayerKey = layerKey;
+        if (!layerObj.visible) {
+          layerObj.visible = true;
+          toggle.checked = true;
+          layerObj.layer.addTo(map);
+        }
+        map.fitBounds(layerObj.bounds, { padding: [20, 20] });
+        updateColorbar(layerObj.min, layerObj.max);
+        updateRasterStats(layerObj.min, layerObj.max, layerObj.width, layerObj.height, layerObj.crsText, layerObj.label);
+        mapEmptyNote.style.display = 'none';
+        addConsoleLine('info', 'Focused on ' + layerObj.label);
+      });
+
+      right.appendChild(toggle);
+      right.appendChild(focusBtn);
+
+      row.appendChild(left);
+      row.appendChild(right);
+      layerControlList.appendChild(row);
+    });
+  }
+
+  function registerRasterLayer(layerKey, layerLabel, fileName, leafletLayer, bounds, stats) {
+    if (rasterLayers[layerKey] && rasterLayers[layerKey].layer && map.hasLayer(rasterLayers[layerKey].layer)) {
+      map.removeLayer(rasterLayers[layerKey].layer);
+    }
+
+    rasterLayers[layerKey] = {
+      key: layerKey,
+      label: layerLabel,
+      fileName: fileName,
+      layer: leafletLayer,
+      bounds: bounds,
+      visible: true,
+      min: stats.min,
+      max: stats.max,
+      width: stats.width,
+      height: stats.height,
+      crsText: stats.crsText
+    };
+
+    if (!layerOrder.includes(layerKey)) {
+      layerOrder.push(layerKey);
+    }
+
+    activeLayerKey = layerKey;
+    refreshLayerControlList();
+  }
+
+  function addAscLayer(asc, fileName, layerKey, layerLabel) {
     const canvas = renderGridToCanvas(asc.width, asc.height, asc.grid, asc.min, asc.max);
     const url = canvas.toDataURL('image/png');
 
@@ -316,8 +472,7 @@
       throw err;
     }
 
-    currentRasterLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
-    currentRasterBounds = bounds;
+    const leafletLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
 
     if (!placementMode || placementMode.value === 'fit') {
       map.fitBounds(bounds, { padding: [20, 20] });
@@ -326,16 +481,24 @@
     mapEmptyNote.style.display = 'none';
     setStatus('Loaded ' + fileName);
     updateColorbar(asc.min, asc.max);
-    updateRasterStats(asc.min, asc.max, asc.width, asc.height, crsText);
-    addConsoleLine('info', 'ASC displayed successfully');
+    updateRasterStats(asc.min, asc.max, asc.width, asc.height, crsText, layerLabel);
+
+    registerRasterLayer(layerKey, layerLabel, fileName, leafletLayer, bounds, {
+      min: asc.min,
+      max: asc.max,
+      width: asc.width,
+      height: asc.height,
+      crsText
+    });
+
+    addConsoleLine('info', layerLabel + ' displayed successfully');
   }
 
-  async function addTiffLayer(file) {
+  async function addTiffLayer(file, layerKey, layerLabel) {
     if (typeof GeoTIFF === 'undefined') {
       throw new Error('GeoTIFF library not loaded');
     }
 
-    clearCurrentLayer();
     addConsoleLine('info', 'Reading TIFF array buffer');
 
     const buffer = await file.arrayBuffer();
@@ -381,8 +544,7 @@
       addConsoleLine('warn', 'TIFF bbox unavailable; using fallback bounds');
     }
 
-    currentRasterLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
-    currentRasterBounds = bounds;
+    const leafletLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
 
     if (!placementMode || placementMode.value === 'fit') {
       map.fitBounds(bounds, { padding: [20, 20] });
@@ -391,20 +553,29 @@
     mapEmptyNote.style.display = 'none';
     setStatus('Loaded ' + file.name);
     updateColorbar(min, max);
-    updateRasterStats(min, max, width, height, crsText);
-    addConsoleLine('info', 'TIFF displayed successfully');
+    updateRasterStats(min, max, width, height, crsText, layerLabel);
+
+    registerRasterLayer(layerKey, layerLabel, file.name, leafletLayer, bounds, {
+      min,
+      max,
+      width,
+      height,
+      crsText
+    });
+
+    addConsoleLine('info', layerLabel + ' displayed successfully');
   }
 
-  async function handleFile(file) {
+  async function handleRasterFile(file, layerKey, layerLabel) {
     try {
       if (!file) {
         addConsoleLine('err', 'No file received');
         return;
       }
 
-      selectedFile.textContent = file.name;
+      selectedFileMap[layerKey].textContent = file.name;
       setStatus('Reading ' + file.name + ' ...');
-      addConsoleLine('info', 'File selected: ' + file.name);
+      addConsoleLine('info', 'File selected for ' + layerLabel + ': ' + file.name);
 
       const ext = file.name.split('.').pop().toLowerCase();
 
@@ -412,63 +583,256 @@
         const text = await file.text();
         addConsoleLine('info', 'ASC text loaded. Length=' + text.length);
         const asc = parseAsc(text);
-        addAscLayer(asc, file.name);
+        addAscLayer(asc, file.name, layerKey, layerLabel);
       } else if (ext === 'tif' || ext === 'tiff') {
-        await addTiffLayer(file);
+        await addTiffLayer(file, layerKey, layerLabel);
       } else {
         throw new Error('Unsupported file type: ' + ext);
       }
     } catch (err) {
       setStatus('Error loading file');
-      addConsoleLine('err', 'handleFile error: ' + err.message);
+      addConsoleLine('err', 'handleRasterFile error: ' + err.message);
     }
   }
 
-  fileInput.addEventListener('change', function (e) {
-    const file = e.target.files[0];
-    if (!file) {
-      addConsoleLine('warn', 'No file selected');
+  function activatePanel(panelId) {
+    panelTabs.forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.panel === panelId);
+    });
+
+    subPanels.forEach(panel => {
+      panel.classList.toggle('active', panel.id === panelId);
+    });
+  }
+
+  function parseRainfallText(text) {
+    const lines = text.replace(/\r/g, '').trim().split('\n').filter(Boolean);
+    if (lines.length < 2) throw new Error('Rainfall file must have at least 2 rows');
+
+    const splitLine = (line) => {
+      if (line.includes(',')) return line.split(',');
+      if (line.includes('\t')) return line.split('\t');
+      return line.trim().split(/\s+/);
+    };
+
+    const headers = splitLine(lines[0]).map(s => s.trim());
+    if (headers.length < 2) throw new Error('Rainfall file must have at least 2 columns');
+
+    const xLabel = headers[0];
+    const yLabel = headers[1];
+
+    const xValues = [];
+    const yValues = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const parts = splitLine(lines[i]).map(s => s.trim());
+      if (parts.length < 2) continue;
+
+      const x = parts[0];
+      const y = parseFloat(parts[1]);
+
+      if (!Number.isFinite(y)) continue;
+
+      xValues.push(x);
+      yValues.push(y);
+    }
+
+    if (yValues.length === 0) throw new Error('No valid rainfall values found');
+
+    return { xLabel, yLabel, xValues, yValues };
+  }
+
+  function drawRainfallChart(container, dataset, title) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 520;
+    canvas.height = 240;
+    canvas.className = 'rainfall-chart';
+
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    const padL = 55;
+    const padR = 20;
+    const padT = 20;
+    const padB = 40;
+
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i < 5; i++) {
+      const y = padT + ((H - padT - padB) / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(W - padR, y);
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, H - padB);
+    ctx.lineTo(W - padR, H - padB);
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.stroke();
+
+    const yMin = 0;
+    const yMax = Math.max(...dataset.yValues);
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+
+    ctx.beginPath();
+    dataset.yValues.forEach((val, i) => {
+      const x = padL + (dataset.yValues.length === 1 ? plotW / 2 : (plotW * i) / (dataset.yValues.length - 1));
+      const y = H - padB - ((val - yMin) / ((yMax - yMin) || 1)) * plotH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = '#3f9cff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.fillStyle = '#dbe6f7';
+    ctx.font = '12px Arial';
+    ctx.fillText(dataset.yLabel, 10, 18);
+    ctx.fillText(dataset.xLabel, W / 2 - 20, H - 10);
+
+    ctx.fillStyle = '#9fb3cf';
+    ctx.font = '11px Arial';
+    ctx.fillText(yMax.toFixed(2), 10, padT + 4);
+    ctx.fillText('0', 28, H - padB);
+
+    const card = document.createElement('div');
+    card.className = 'rainfall-plot-card';
+
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'rainfall-plot-title';
+    titleDiv.textContent = title;
+
+    card.appendChild(titleDiv);
+    card.appendChild(canvas);
+    container.appendChild(card);
+  }
+
+  function createRainfallUploadBlock(index) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'upload-section';
+
+    const title = document.createElement('div');
+    title.className = 'upload-section-title';
+    title.textContent = 'Rainfall file ' + index;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,.txt';
+    input.hidden = true;
+    input.id = 'rainfallFileInput_' + index;
+
+    const label = document.createElement('label');
+    label.className = 'dropbox';
+    label.htmlFor = input.id;
+    label.innerHTML = `
+      <div class="dropbox-icon">⤒</div>
+      <div class="dropbox-title">Upload rainfall file ${index}</div>
+      <div class="dropbox-subtitle">CSV, TXT, comma/tab/space separated</div>
+    `;
+
+    const fileInfo = document.createElement('div');
+    fileInfo.className = 'field-box compact-box';
+    fileInfo.textContent = 'None';
+
+    input.addEventListener('change', async function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      fileInfo.textContent = file.name;
+      addConsoleLine('info', 'Rainfall file selected: ' + file.name);
+
+      try {
+        const text = await file.text();
+        const dataset = parseRainfallText(text);
+
+        const existingEmpty = rainfallPlotArea.querySelector('.empty-plot-note');
+        if (existingEmpty) existingEmpty.remove();
+
+        drawRainfallChart(
+          rainfallPlotArea,
+          dataset,
+          file.name + ' (' + dataset.xLabel + ' vs ' + dataset.yLabel + ')'
+        );
+
+        addConsoleLine('info', 'Rainfall plot created for ' + file.name);
+      } catch (err) {
+        addConsoleLine('err', 'Rainfall file error: ' + err.message);
+      }
+    });
+
+    wrapper.appendChild(title);
+    wrapper.appendChild(input);
+    wrapper.appendChild(label);
+    wrapper.appendChild(fileInfo);
+
+    return wrapper;
+  }
+
+  function generateRainfallInputs() {
+    const count = parseInt(rainfallCountInput.value, 10);
+
+    rainfallUploadContainer.innerHTML = '';
+
+    if (!Number.isFinite(count) || count < 1) {
+      addConsoleLine('warn', 'Rainfall file count must be at least 1');
       return;
     }
-    handleFile(file);
-  });
 
-  dropBox.addEventListener('dragover', function (e) {
-    e.preventDefault();
-    dropBox.classList.add('dragover');
-  });
-
-  dropBox.addEventListener('dragleave', function () {
-    dropBox.classList.remove('dragover');
-  });
-
-  dropBox.addEventListener('drop', function (e) {
-    e.preventDefault();
-    dropBox.classList.remove('dragover');
-    const file = e.dataTransfer.files[0];
-    if (!file) {
-      addConsoleLine('warn', 'Drop event had no file');
-      return;
+    for (let i = 1; i <= count; i++) {
+      rainfallUploadContainer.appendChild(createRainfallUploadBlock(i));
     }
-    handleFile(file);
+
+    addConsoleLine('info', 'Generated ' + count + ' rainfall upload input(s)');
+  }
+
+  panelTabs.forEach(tab => {
+    tab.addEventListener('click', function () {
+      activatePanel(tab.dataset.panel);
+      addConsoleLine('info', 'Switched to panel: ' + tab.dataset.panel);
+    });
+  });
+
+  Object.keys(fileInputMap).forEach(layerKey => {
+    const input = fileInputMap[layerKey];
+    input.addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) {
+        addConsoleLine('warn', 'No file selected for ' + layerKey);
+        return;
+      }
+
+      const labelMap = {
+        dem: 'DEM Data',
+        soilType: 'Soil Type Map',
+        soilThickness: 'Soil Thickness Map'
+      };
+
+      handleRasterFile(file, layerKey, labelMap[layerKey]);
+    });
   });
 
   clearConsoleBtn.addEventListener('click', clearConsole);
-  fitLayerBtn.addEventListener('click', fitCurrentLayer);
-  fitLayerMapBtn.addEventListener('click', fitCurrentLayer);
+  fitLayerBtn.addEventListener('click', fitActiveLayer);
+  fitLayerMapBtn.addEventListener('click', fitActiveLayer);
 
   clearLayerBtn.addEventListener('click', function () {
-    clearCurrentLayer();
-    mapEmptyNote.style.display = 'block';
-    hideColorbar();
-    rasterStats.textContent = 'No raster loaded';
-    setStatus('Layer cleared');
-    addConsoleLine('warn', 'Raster layer cleared');
+    clearAllLayers();
+    setStatus('All layers cleared');
+    addConsoleLine('warn', 'All raster layers cleared');
   });
 
   resetViewBtn.addEventListener('click', resetMapView);
   zoomInMapBtn.addEventListener('click', function () { if (map) map.zoomIn(); });
   zoomOutMapBtn.addEventListener('click', function () { if (map) map.zoomOut(); });
+
+  generateRainfallInputsBtn.addEventListener('click', generateRainfallInputs);
 
   if (typeof proj4 === 'undefined') {
     addConsoleLine('err', 'proj4 library did not load');
@@ -477,6 +841,7 @@
   }
 
   initMap();
+  generateRainfallInputs();
   addConsoleLine('info', 'System initialized');
-  addConsoleLine('info', 'Ready. Choose CRS first if your raster is projected.');
+  addConsoleLine('info', 'Ready. Upload DEM / soil rasters or rainfall files.');
 })();
