@@ -1,509 +1,482 @@
-:root {
-    --bg: #0b1119;
-    --panel: #121924;
-    --panel-2: #0f1722;
-    --line: rgba(255, 255, 255, 0.08);
-    --line-2: rgba(82, 128, 198, 0.18);
-    --text: #edf4ff;
-    --muted: #8ea0ba;
-    --blue: #3f9cff;
-    --green: #41cf76;
-    --yellow: #ffd166;
-    --red: #ff6b6b;
-    --shadow: 0 18px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    --radius: 16px;
-}
+(function () {
+  const fileInput = document.getElementById('fileInput');
+  const dropBox = document.getElementById('dropBox');
+  const selectedFile = document.getElementById('selectedFile');
+  const uploadStatus = document.getElementById('uploadStatus');
+  const mapEmptyNote = document.getElementById('mapEmptyNote');
+  const consoleContent = document.getElementById('consoleContent');
+  const clearConsoleBtn = document.getElementById('clearConsoleBtn');
+  const fitLayerBtn = document.getElementById('fitLayerBtn');
+  const clearLayerBtn = document.getElementById('clearLayerBtn');
+  const resetViewBtn = document.getElementById('resetViewBtn');
+  const zoomInMapBtn = document.getElementById('zoomInMapBtn');
+  const zoomOutMapBtn = document.getElementById('zoomOutMapBtn');
+  const fitLayerMapBtn = document.getElementById('fitLayerMapBtn');
 
-* {
-    box-sizing: border-box;
-}
+  const crsSelect = document.getElementById('crsSelect');
+  const placementMode = document.getElementById('placementMode');
+  const rasterStats = document.getElementById('rasterStats');
+  const colorbarPanel = document.getElementById('colorbarPanel');
+  const colorbarMin = document.getElementById('colorbarMin');
+  const colorbarMid = document.getElementById('colorbarMid');
+  const colorbarMax = document.getElementById('colorbarMax');
 
-html,
-body {
-    margin: 0;
-    height: 100%;
-    font-family: Arial, Helvetica, sans-serif;
-    color: var(--text);
-    background:
-        radial-gradient(circle at 50% -10%, rgba(65, 130, 220, .18), transparent 35%),
-        linear-gradient(180deg, #0b1119 0%, #070c13 100%);
-}
+  let map = null;
+  let currentRasterLayer = null;
+  let currentRasterBounds = null;
 
-body {
-    overflow: hidden;
-}
+  if (typeof proj4 !== 'undefined') {
+    proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs +type=crs');
+    proj4.defs('EPSG:4490', '+proj=longlat +ellps=GRS80 +no_defs +type=crs');
+    proj4.defs('EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs +type=crs');
+    proj4.defs('EPSG:4549', '+proj=tmerc +lat_0=0 +lon_0=120 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs +type=crs');
+  }
 
-.app {
-    display: grid;
-    grid-template-columns: 360px 1fr 360px;
-    grid-template-rows: 60px 1fr;
-    gap: 12px;
-    padding: 12px;
-    height: 100vh;
-}
+  function addConsoleLine(type, message) {
+    const line = document.createElement('div');
+    const now = new Date();
+    const ts = now.toLocaleTimeString();
+    line.style.marginBottom = '6px';
+    line.style.color = type === 'err' ? '#ff6b6b' : type === 'warn' ? '#ffd166' : '#8affc1';
+    line.textContent = `[${ts}] ${message}`;
+    consoleContent.appendChild(line);
+    consoleContent.scrollTop = consoleContent.scrollHeight;
+  }
 
-.topbar {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 16px;
-    border: 1px solid rgba(95, 150, 230, .18);
-    border-radius: 14px;
-    background: linear-gradient(180deg, rgba(24, 31, 43, .96), rgba(16, 21, 31, .92));
-    box-shadow:
-        0 18px 40px rgba(0, 0, 0, .35),
-        inset 0 1px 0 rgba(255, 255, 255, .03),
-        inset 0 0 40px rgba(80, 130, 220, .03);
-}
+  function setStatus(message) {
+    uploadStatus.textContent = message;
+  }
 
-.brand-wrap {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
+  function updateRasterStats(min, max, width, height, crsText) {
+    rasterStats.innerHTML =
+      'Min: ' + min.toFixed(2) + '<br>' +
+      'Max: ' + max.toFixed(2) + '<br>' +
+      'Size: ' + width + ' × ' + height + '<br>' +
+      'CRS: ' + crsText;
+  }
 
-.brand-mark {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    background: linear-gradient(135deg, #f29d41, #d14624);
-}
+  function updateColorbar(min, max) {
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+    const mid = (min + max) / 2;
+    colorbarMax.textContent = max.toFixed(2);
+    colorbarMid.textContent = mid.toFixed(2);
+    colorbarMin.textContent = min.toFixed(2);
+    colorbarPanel.style.display = 'block';
+    addConsoleLine('info', 'Color bar updated');
+  }
 
-.brand-title {
-    font-weight: 700;
-}
+  function hideColorbar() {
+    colorbarPanel.style.display = 'none';
+  }
 
-.brand-subtitle {
-    color: var(--muted);
-    font-size: 12px;
-    margin-top: 2px;
-}
+  function clearConsole() {
+    consoleContent.innerHTML = '';
+    addConsoleLine('info', 'Console cleared');
+  }
 
-.top-actions {
-    display: flex;
-    gap: 8px;
-}
+  window.onerror = function (message, source, lineno) {
+    addConsoleLine('err', `JS error: ${message} (line ${lineno})`);
+  };
 
-.card {
-    border: 1px solid rgba(95, 150, 230, .18);
-    border-radius: var(--radius);
-    background: linear-gradient(180deg, rgba(19, 25, 36, .98), rgba(10, 16, 26, .96));
-    box-shadow:
-        0 18px 40px rgba(0, 0, 0, .35),
-        inset 0 1px 0 rgba(255, 255, 255, .03),
-        inset 0 0 40px rgba(80, 130, 220, .03);
-    min-height: 0;
-    overflow: hidden;
-}
+  window.addEventListener('unhandledrejection', function (event) {
+    addConsoleLine('err', 'Promise error: ' + event.reason);
+  });
 
-.left-panel,
-.right-panel,
-.center-panel {
-    padding: 14px;
-}
-
-.card-title {
-    font-size: 15px;
-    font-weight: 700;
-    margin-bottom: 14px;
-}
-
-.panel-tabs {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-    margin-bottom: 14px;
-}
-
-.panel-tab {
-    border: 1px solid var(--line);
-    background: rgba(255, 255, 255, .03);
-    color: #cbd9eb;
-    padding: 10px 8px;
-    border-radius: 10px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.panel-tab.active {
-    background: rgba(60, 145, 255, .14);
-    color: #63aeff;
-}
-
-.dropbox {
-    min-height: 120px;
-    border: 1px dashed rgba(255, 255, 255, .18);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, .02);
-    display: grid;
-    place-items: center;
-    text-align: center;
-    cursor: pointer;
-    padding: 18px;
-    transition: 0.2s ease;
-}
-
-.dropbox:hover,
-.dropbox.dragover {
-    border-color: rgba(87, 169, 255, .7);
-    background: rgba(87, 169, 255, .08);
-}
-
-.dropbox-icon {
-    font-size: 28px;
-    margin-bottom: 6px;
-    color: #7fc2ff;
-}
-
-.dropbox-title {
-    font-weight: 700;
-}
-
-.dropbox-subtitle {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 4px;
-}
-
-.field-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0;
-}
-
-.field-group {
-    margin-top: 14px;
-}
-
-.field-label {
-    font-size: 12px;
-    color: #ccd8e8;
-    margin-bottom: 6px;
-}
-
-.field-box {
-    min-height: 40px;
-    border-radius: 10px;
-    border: 1px solid var(--line);
-    background: linear-gradient(180deg, #161f2d, #101722);
-    padding: 10px;
-    color: #dce7f8;
-    line-height: 1.4;
-}
-
-.field-select {
-    width: 100%;
-    min-height: 40px;
-    border-radius: 10px;
-    border: 1px solid var(--line);
-    background: linear-gradient(180deg, #161f2d, #101722);
-    padding: 10px;
-    color: #dce7f8;
-    line-height: 1.4;
-    font-size: 13px;
-}
-
-.small-text {
-    font-size: 13px;
-    color: #d7e3f2;
-}
-
-.info-card,
-.status-card,
-.config-card {
-    margin-top: 16px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, .02);
-    padding: 12px;
-}
-
-.info-card-title,
-.status-card-title,
-.config-card-title {
-    font-weight: 700;
-    margin-bottom: 10px;
-}
-
-.status-line {
-    font-size: 13px;
-    color: #d7e3f2;
-}
-
-.good-text {
-    color: #63e291;
-    font-weight: 700;
-}
-
-.status-bar {
-    margin-top: 10px;
-    height: 8px;
-    border-radius: 99px;
-    background: #243547;
-    overflow: hidden;
-}
-
-.status-bar span {
-    display: block;
-    width: 78%;
-    height: 100%;
-    background: linear-gradient(90deg, #3fe16e, #219f54);
-}
-
-.fake-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.fake-tab {
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, .03);
-    border: 1px solid rgba(255, 255, 255, .06);
-    font-size: 12px;
-    font-weight: 700;
-    color: #cbd9eb;
-}
-
-.fake-tab.active {
-    background: rgba(60, 145, 255, .14);
-    color: #63aeff;
-}
-
-.mini-setting {
-    margin-bottom: 10px;
-}
-
-.map-wrap {
-    position: relative;
-    height: calc(100% - 34px);
-    min-height: 500px;
-    border-radius: 14px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, .06);
-}
-
-#map {
-    width: 100%;
-    height: 100%;
-    background: #07101a;
-}
-
-.map-overlay-top {
-    position: absolute;
-    top: 14px;
-    left: 60px;
-    right: 18px;
-    z-index: 700;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 14px;
-    border-radius: 12px;
-    background: rgba(15, 22, 34, .72);
-    border: 1px solid rgba(255, 255, 255, .08);
-    backdrop-filter: blur(6px);
-}
-
-.map-overlay-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: #edf4ff;
-}
-
-.map-overlay-actions {
-    display: flex;
-    gap: 8px;
-}
-
-.map-chip {
-    border: none;
-    padding: 8px 14px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, .06);
-    color: #dbe6f7;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.map-chip.active {
-    background: rgba(63, 156, 255, .18);
-    color: #7fc2ff;
-}
-
-.map-toolbar {
-    position: absolute;
-    top: 72px;
-    left: 14px;
-    z-index: 700;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.map-tool {
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, .08);
-    background: rgba(13, 20, 30, .88);
-    color: #d8e4f4;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
-}
-
-.map-empty-note {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 500;
-    text-align: center;
-    padding: 18px 22px;
-    background: rgba(10, 18, 28, .78);
-    border: 1px solid rgba(255, 255, 255, .08);
-    border-radius: 14px;
-    color: var(--text);
-    pointer-events: none;
-}
-
-.map-empty-note small {
-    display: block;
-    margin-top: 6px;
-    color: var(--muted);
-    font-size: 12px;
-}
-
-.colorbar-panel {
-    position: absolute;
-    right: 18px;
-    bottom: 18px;
-    z-index: 700;
-    width: 180px;
-    padding: 12px;
-    border-radius: 12px;
-    background: rgba(15, 22, 34, .80);
-    border: 1px solid rgba(255, 255, 255, .08);
-    backdrop-filter: blur(6px);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, .25);
-}
-
-.colorbar-title {
-    font-size: 13px;
-    font-weight: 700;
-    margin-bottom: 10px;
-    color: #edf4ff;
-}
-
-.colorbar-wrap {
-    display: flex;
-    align-items: stretch;
-    gap: 10px;
-}
-
-.colorbar-gradient {
-    width: 22px;
-    height: 180px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, .08);
-    background: linear-gradient(to top, #0000ff 0%, #00ffff 25%, #ffff66 60%, #ff9900 80%, #ff0000 100%);
-}
-
-.colorbar-labels {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    font-size: 12px;
-    color: #dbe6f7;
-}
-
-.console-block {
-    margin-top: 16px;
-}
-
-.console-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-    font-weight: 700;
-}
-
-.console-content {
-    height: calc(100% - 42px);
-    min-height: 520px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, .08);
-    background: #0a1017;
-    padding: 12px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: "Courier New", monospace;
-    font-size: 12px;
-}
-
-.small-btn {
-    background: #162131;
-    color: #dbe6f7;
-    border: 1px solid rgba(255, 255, 255, .08);
-    border-radius: 8px;
-    padding: 7px 11px;
-    cursor: pointer;
-    font-size: 12px;
-}
-
-.small-btn:hover {
-    background: #1c2a40;
-}
-
-.leaflet-control-zoom a {
-    background: #0f1722 !important;
-    color: #dbe6f7 !important;
-    border-color: rgba(255, 255, 255, .08) !important;
-}
-
-.leaflet-bar {
-    border: none !important;
-    box-shadow: none !important;
-}
-
-.leaflet-control-attribution {
-    background: rgba(10, 16, 23, .72) !important;
-    color: #9ab0c9 !important;
-    font-size: 10px !important;
-}
-
-@media (max-width: 1200px) {
-    body {
-        overflow: auto;
+  function initMap() {
+    if (typeof L === 'undefined') {
+      addConsoleLine('err', 'Leaflet did not load');
+      return;
     }
 
-    .app {
-        height: auto;
-        min-height: 100vh;
-        grid-template-columns: 1fr;
-        grid-template-rows: 60px auto auto auto;
+    map = L.map('map', { center: [29.72, 119.96], zoom: 10, zoomControl: true });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: 'Map data © OpenStreetMap contributors'
+    }).addTo(map);
+
+    addConsoleLine('info', 'Map initialized');
+  }
+
+  function clearCurrentLayer() {
+    if (currentRasterLayer && map) {
+      map.removeLayer(currentRasterLayer);
+    }
+    currentRasterLayer = null;
+    currentRasterBounds = null;
+  }
+
+  function fitCurrentLayer() {
+    if (map && currentRasterBounds) {
+      map.fitBounds(currentRasterBounds, { padding: [20, 20] });
+      addConsoleLine('info', 'Map fit to raster bounds');
+    } else {
+      addConsoleLine('warn', 'No raster layer to fit');
+    }
+  }
+
+  function resetMapView() {
+    if (map) {
+      map.setView([29.72, 119.96], 10);
+      addConsoleLine('info', 'Map reset to default view');
+    }
+  }
+
+  function parseAsc(text) {
+    addConsoleLine('info', 'Parsing ASC file');
+    const lines = text.replace(/\r/g, '').trim().split('\n');
+    const header = {};
+    let dataStart = 0;
+
+    for (let i = 0; i < Math.min(lines.length, 10); i++) {
+      const parts = lines[i].trim().split(/\s+/);
+      if (parts.length >= 2) {
+        const key = parts[0].toLowerCase();
+        const value = parts[1];
+        if (['ncols', 'nrows', 'xllcorner', 'yllcorner', 'xllcenter', 'yllcenter', 'cellsize', 'nodata_value'].includes(key)) {
+          header[key] = parseFloat(value);
+          dataStart = i + 1;
+        }
+      }
     }
 
-    .map-wrap {
-        min-height: 540px;
+    const ncols = parseInt(header.ncols, 10);
+    const nrows = parseInt(header.nrows, 10);
+    const nodata = header.nodata_value;
+
+    if (!ncols || !nrows) {
+      throw new Error('ASC header invalid: ncols/nrows not found');
     }
 
-    .console-content {
-        min-height: 260px;
+    const values = [];
+    for (let r = dataStart; r < lines.length; r++) {
+      const row = lines[r].trim();
+      if (!row) continue;
+      const nums = row.split(/\s+/);
+      for (const n of nums) {
+        const v = parseFloat(n);
+        if (Number.isFinite(v)) values.push(v);
+      }
     }
 
-    .map-overlay-top {
-        left: 14px;
-        right: 14px;
+    if (values.length < ncols * nrows) {
+      throw new Error('ASC data size is smaller than expected');
     }
 
-    .colorbar-panel {
-        width: 160px;
+    const sliced = values.slice(0, ncols * nrows);
+    const grid = new Float32Array(sliced.length);
+    let min = Infinity;
+    let max = -Infinity;
+
+    for (let i = 0; i < sliced.length; i++) {
+      const val = sliced[i];
+      if (!Number.isFinite(val) || (typeof nodata !== 'undefined' && val === nodata)) {
+        grid[i] = NaN;
+      } else {
+        grid[i] = val;
+        if (val < min) min = val;
+        if (val > max) max = val;
+      }
     }
-}
+
+    addConsoleLine('info', `ASC parsed: ${ncols} x ${nrows}`);
+
+    return {
+      width: ncols,
+      height: nrows,
+      grid,
+      min,
+      max,
+      xll: header.xllcorner ?? header.xllcenter ?? 0,
+      yll: header.yllcorner ?? header.yllcenter ?? 0,
+      cellsize: header.cellsize ?? 1
+    };
+  }
+
+  function renderGridToCanvas(width, height, grid, min, max) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(width, height);
+    const data = imageData.data;
+
+    for (let i = 0; i < grid.length; i++) {
+      const idx = i * 4;
+      const val = grid[i];
+
+      if (!Number.isFinite(val)) {
+        data[idx] = 0;
+        data[idx + 1] = 0;
+        data[idx + 2] = 0;
+        data[idx + 3] = 0;
+      } else {
+        const norm = Math.max(0, Math.min(1, (val - min) / ((max - min) || 1)));
+        data[idx] = Math.round(255 * norm);
+        data[idx + 1] = Math.round(180 * (1 - Math.abs(norm - 0.5) * 2));
+        data[idx + 2] = Math.round(255 * (1 - norm));
+        data[idx + 3] = 220;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+  }
+
+  function ascLooksGeographic(asc) {
+    const west = asc.xll;
+    const south = asc.yll;
+    const east = asc.xll + asc.width * asc.cellsize;
+    const north = asc.yll + asc.height * asc.cellsize;
+
+    return (
+      west >= -180 && west <= 180 &&
+      east >= -180 && east <= 180 &&
+      south >= -90 && south <= 90 &&
+      north >= -90 && north <= 90
+    );
+  }
+
+  function transformPointToWGS84(x, y, sourceCRS) {
+    if (typeof proj4 === 'undefined') {
+      throw new Error('proj4 not loaded');
+    }
+
+    if (sourceCRS === 'EPSG:4326' || sourceCRS === 'EPSG:4490') {
+      return [x, y];
+    }
+
+    const result = proj4(sourceCRS, 'EPSG:4326', [x, y]);
+
+    if (!result || !isFinite(result[0]) || !isFinite(result[1])) {
+      throw new Error('Invalid transformed coordinate for ' + sourceCRS);
+    }
+
+    return result;
+  }
+
+  function ascBoundsToLatLngBounds(asc, selectedCRS) {
+    const xMin = asc.xll;
+    const yMin = asc.yll;
+    const xMax = asc.xll + asc.width * asc.cellsize;
+    const yMax = asc.yll + asc.height * asc.cellsize;
+
+    addConsoleLine('info', 'ASC raw bounds: xMin=' + xMin + ', yMin=' + yMin + ', xMax=' + xMax + ', yMax=' + yMax);
+
+    if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) {
+      return [
+        [yMin, xMin],
+        [yMax, xMax]
+      ];
+    }
+
+    if (selectedCRS === 'EPSG:3857' || selectedCRS === 'EPSG:4549') {
+      const ll = transformPointToWGS84(xMin, yMin, selectedCRS);
+      const ur = transformPointToWGS84(xMax, yMax, selectedCRS);
+
+      addConsoleLine('info', 'Transformed lower-left: lon=' + ll[0] + ', lat=' + ll[1]);
+      addConsoleLine('info', 'Transformed upper-right: lon=' + ur[0] + ', lat=' + ur[1]);
+
+      return [
+        [ll[1], ll[0]],
+        [ur[1], ur[0]]
+      ];
+    }
+
+    throw new Error('Unsupported CRS selection: ' + selectedCRS);
+  }
+
+  function addAscLayer(asc, fileName) {
+    clearCurrentLayer();
+
+    const canvas = renderGridToCanvas(asc.width, asc.height, asc.grid, asc.min, asc.max);
+    const url = canvas.toDataURL('image/png');
+
+    let bounds;
+    let crsText = 'Auto detect';
+    const selectedCRS = crsSelect ? crsSelect.value : 'auto';
+
+    try {
+      bounds = ascBoundsToLatLngBounds(asc, selectedCRS);
+
+      if (selectedCRS === 'auto') {
+        if (ascLooksGeographic(asc)) {
+          crsText = 'Auto → EPSG:4326 geographic';
+          addConsoleLine('info', 'ASC auto-detected as geographic');
+        } else {
+          crsText = 'Auto → unsupported projected CRS';
+          addConsoleLine('warn', 'Auto detect could not identify projected CRS. Choose one manually.');
+        }
+      } else {
+        crsText = selectedCRS;
+        addConsoleLine('info', 'ASC displayed using selected CRS: ' + selectedCRS);
+      }
+    } catch (err) {
+      addConsoleLine('err', 'CRS transform failed: ' + err.message);
+      setStatus('CRS transform failed');
+      throw err;
+    }
+
+    currentRasterLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
+    currentRasterBounds = bounds;
+
+    if (!placementMode || placementMode.value === 'fit') {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+
+    mapEmptyNote.style.display = 'none';
+    setStatus('Loaded ' + fileName);
+    updateColorbar(asc.min, asc.max);
+    updateRasterStats(asc.min, asc.max, asc.width, asc.height, crsText);
+    addConsoleLine('info', 'ASC displayed successfully');
+  }
+
+  async function addTiffLayer(file) {
+    if (typeof GeoTIFF === 'undefined') {
+      throw new Error('GeoTIFF library not loaded');
+    }
+
+    clearCurrentLayer();
+    addConsoleLine('info', 'Reading TIFF array buffer');
+
+    const buffer = await file.arrayBuffer();
+    const tiff = await GeoTIFF.fromArrayBuffer(buffer);
+    const image = await tiff.getImage();
+    const width = image.getWidth();
+    const height = image.getHeight();
+    const rasters = await image.readRasters();
+    const grid = rasters[0];
+
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < grid.length; i++) {
+      const v = grid[i];
+      if (!Number.isFinite(v)) continue;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+
+    const canvas = renderGridToCanvas(width, height, grid, min, max);
+    const url = canvas.toDataURL('image/png');
+
+    let bounds = [[29.60, 119.85], [29.85, 120.10]];
+    let crsText = 'TIFF preview';
+
+    try {
+      const bbox = image.getBoundingBox();
+
+      if (
+        bbox && bbox.length === 4 &&
+        bbox[0] >= -180 && bbox[0] <= 180 &&
+        bbox[2] >= -180 && bbox[2] <= 180 &&
+        bbox[1] >= -90 && bbox[1] <= 90 &&
+        bbox[3] >= -90 && bbox[3] <= 90
+      ) {
+        bounds = [[bbox[1], bbox[0]], [bbox[3], bbox[2]]];
+        crsText = 'Geographic TIFF bbox';
+        addConsoleLine('info', 'TIFF geographic bounding box detected');
+      } else {
+        addConsoleLine('warn', 'TIFF bbox not geographic; using fallback bounds');
+      }
+    } catch (err) {
+      addConsoleLine('warn', 'TIFF bbox unavailable; using fallback bounds');
+    }
+
+    currentRasterLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
+    currentRasterBounds = bounds;
+
+    if (!placementMode || placementMode.value === 'fit') {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+
+    mapEmptyNote.style.display = 'none';
+    setStatus('Loaded ' + file.name);
+    updateColorbar(min, max);
+    updateRasterStats(min, max, width, height, crsText);
+    addConsoleLine('info', 'TIFF displayed successfully');
+  }
+
+  async function handleFile(file) {
+    try {
+      if (!file) {
+        addConsoleLine('err', 'No file received');
+        return;
+      }
+
+      selectedFile.textContent = file.name;
+      setStatus('Reading ' + file.name + ' ...');
+      addConsoleLine('info', 'File selected: ' + file.name);
+
+      const ext = file.name.split('.').pop().toLowerCase();
+
+      if (ext === 'asc') {
+        const text = await file.text();
+        addConsoleLine('info', 'ASC text loaded. Length=' + text.length);
+        const asc = parseAsc(text);
+        addAscLayer(asc, file.name);
+      } else if (ext === 'tif' || ext === 'tiff') {
+        await addTiffLayer(file);
+      } else {
+        throw new Error('Unsupported file type: ' + ext);
+      }
+    } catch (err) {
+      setStatus('Error loading file');
+      addConsoleLine('err', 'handleFile error: ' + err.message);
+    }
+  }
+
+  fileInput.addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (!file) {
+      addConsoleLine('warn', 'No file selected');
+      return;
+    }
+    handleFile(file);
+  });
+
+  dropBox.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    dropBox.classList.add('dragover');
+  });
+
+  dropBox.addEventListener('dragleave', function () {
+    dropBox.classList.remove('dragover');
+  });
+
+  dropBox.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dropBox.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (!file) {
+      addConsoleLine('warn', 'Drop event had no file');
+      return;
+    }
+    handleFile(file);
+  });
+
+  clearConsoleBtn.addEventListener('click', clearConsole);
+  fitLayerBtn.addEventListener('click', fitCurrentLayer);
+  fitLayerMapBtn.addEventListener('click', fitCurrentLayer);
+
+  clearLayerBtn.addEventListener('click', function () {
+    clearCurrentLayer();
+    mapEmptyNote.style.display = 'block';
+    hideColorbar();
+    rasterStats.textContent = 'No raster loaded';
+    setStatus('Layer cleared');
+    addConsoleLine('warn', 'Raster layer cleared');
+  });
+
+  resetViewBtn.addEventListener('click', resetMapView);
+  zoomInMapBtn.addEventListener('click', function () { if (map) map.zoomIn(); });
+  zoomOutMapBtn.addEventListener('click', function () { if (map) map.zoomOut(); });
+
+  if (typeof proj4 === 'undefined') {
+    addConsoleLine('err', 'proj4 library did not load');
+  } else {
+    addConsoleLine('info', 'proj4 library loaded');
+  }
+
+  initMap();
+  addConsoleLine('info', 'System initialized');
+  addConsoleLine('info', 'Ready. Choose CRS first if your raster is projected.');
+})();

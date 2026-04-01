@@ -88,7 +88,7 @@
       return;
     }
 
-    map = L.map('map', { center: [30, 120], zoom: 8, zoomControl: true });
+    map = L.map('map', { center: [29.72, 119.96], zoom: 10, zoomControl: true });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: 'Map data © OpenStreetMap contributors'
@@ -116,7 +116,7 @@
 
   function resetMapView() {
     if (map) {
-      map.setView([30, 120], 8);
+      map.setView([29.72, 119.96], 10);
       addConsoleLine('info', 'Map reset to default view');
     }
   }
@@ -237,13 +237,21 @@
   }
 
   function transformPointToWGS84(x, y, sourceCRS) {
-    if (!proj4) throw new Error('proj4 not loaded');
+    if (typeof proj4 === 'undefined') {
+      throw new Error('proj4 not loaded');
+    }
 
     if (sourceCRS === 'EPSG:4326' || sourceCRS === 'EPSG:4490') {
       return [x, y];
     }
 
-    return proj4(sourceCRS, 'EPSG:4326', [x, y]);
+    const result = proj4(sourceCRS, 'EPSG:4326', [x, y]);
+
+    if (!result || !isFinite(result[0]) || !isFinite(result[1])) {
+      throw new Error('Invalid transformed coordinate for ' + sourceCRS);
+    }
+
+    return result;
   }
 
   function ascBoundsToLatLngBounds(asc, selectedCRS) {
@@ -251,6 +259,8 @@
     const yMin = asc.yll;
     const xMax = asc.xll + asc.width * asc.cellsize;
     const yMax = asc.yll + asc.height * asc.cellsize;
+
+    addConsoleLine('info', 'ASC raw bounds: xMin=' + xMin + ', yMin=' + yMin + ', xMax=' + xMax + ', yMax=' + yMax);
 
     if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) {
       return [
@@ -263,13 +273,16 @@
       const ll = transformPointToWGS84(xMin, yMin, selectedCRS);
       const ur = transformPointToWGS84(xMax, yMax, selectedCRS);
 
+      addConsoleLine('info', 'Transformed lower-left: lon=' + ll[0] + ', lat=' + ll[1]);
+      addConsoleLine('info', 'Transformed upper-right: lon=' + ur[0] + ', lat=' + ur[1]);
+
       return [
         [ll[1], ll[0]],
         [ur[1], ur[0]]
       ];
     }
 
-    return [[-20, -20], [20, 20]];
+    throw new Error('Unsupported CRS selection: ' + selectedCRS);
   }
 
   function addAscLayer(asc, fileName) {
@@ -290,17 +303,17 @@
           crsText = 'Auto → EPSG:4326 geographic';
           addConsoleLine('info', 'ASC auto-detected as geographic');
         } else {
-          crsText = 'Auto → fallback preview';
-          addConsoleLine('warn', 'Auto detect could not confirm projected CRS');
+          crsText = 'Auto → unsupported projected CRS';
+          addConsoleLine('warn', 'Auto detect could not identify projected CRS. Choose one manually.');
         }
       } else {
         crsText = selectedCRS;
         addConsoleLine('info', 'ASC displayed using selected CRS: ' + selectedCRS);
       }
     } catch (err) {
-      bounds = [[-20, -20], [20, 20]];
-      crsText = selectedCRS + ' (fallback preview)';
-      addConsoleLine('warn', 'CRS transform failed, using fallback bounds: ' + err.message);
+      addConsoleLine('err', 'CRS transform failed: ' + err.message);
+      setStatus('CRS transform failed');
+      throw err;
     }
 
     currentRasterLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
@@ -345,7 +358,7 @@
     const canvas = renderGridToCanvas(width, height, grid, min, max);
     const url = canvas.toDataURL('image/png');
 
-    let bounds = [[-20, -20], [20, 20]];
+    let bounds = [[29.60, 119.85], [29.85, 120.10]];
     let crsText = 'TIFF preview';
 
     try {
@@ -456,6 +469,12 @@
   resetViewBtn.addEventListener('click', resetMapView);
   zoomInMapBtn.addEventListener('click', function () { if (map) map.zoomIn(); });
   zoomOutMapBtn.addEventListener('click', function () { if (map) map.zoomOut(); });
+
+  if (typeof proj4 === 'undefined') {
+    addConsoleLine('err', 'proj4 library did not load');
+  } else {
+    addConsoleLine('info', 'proj4 library loaded');
+  }
 
   initMap();
   addConsoleLine('info', 'System initialized');
