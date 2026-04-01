@@ -30,12 +30,14 @@
   const mapEmptyNote = document.getElementById('mapEmptyNote');
   const consoleContent = document.getElementById('consoleContent');
   const clearConsoleBtn = document.getElementById('clearConsoleBtn');
+
   const fitLayerBtn = document.getElementById('fitLayerBtn');
   const clearLayerBtn = document.getElementById('clearLayerBtn');
   const resetViewBtn = document.getElementById('resetViewBtn');
-  const zoomInMapBtn = document.getElementById('zoomInMapBtn');
-  const zoomOutMapBtn = document.getElementById('zoomOutMapBtn');
-  const fitLayerMapBtn = document.getElementById('fitLayerMapBtn');
+
+  const fitLayerBtnInside = document.getElementById('fitLayerBtnInside');
+  const clearLayerBtnInside = document.getElementById('clearLayerBtnInside');
+  const resetViewBtnInside = document.getElementById('resetViewBtnInside');
 
   const crsSelect = document.getElementById('crsSelect');
   const rasterStats = document.getElementById('rasterStats');
@@ -64,10 +66,14 @@
   const vizTabs = document.querySelectorAll('.viz-tab');
   const vizPanels = document.querySelectorAll('.viz-panel');
 
+  const mapStyleButtons = document.querySelectorAll('.map-style-btn');
+
   let map = null;
   let rasterLayers = {};
   let activeLayerKey = null;
   let dynamicGeoConfigs = {};
+  let baseLayers = {};
+  let currentBaseLayerKey = 'osm';
 
   if (typeof proj4 !== 'undefined') {
     proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs +type=crs');
@@ -136,11 +142,41 @@
 
     map = L.map('map', { center: [29.72, 119.96], zoom: 10, zoomControl: true });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: 'Map data © OpenStreetMap contributors'
-    }).addTo(map);
+    baseLayers = {
+      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'Map data © OpenStreetMap contributors'
+      }),
+      topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: 'Map data © OpenTopoMap contributors'
+      }),
+      terrain: L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg', {
+        attribution: 'Map tiles by Stamen Design'
+      }),
+      satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri'
+      })
+    };
+
+    baseLayers.osm.addTo(map);
 
     addConsoleLine('info', 'Map initialized');
+  }
+
+  function switchBaseLayer(key) {
+    if (!baseLayers[key] || !map) return;
+
+    if (baseLayers[currentBaseLayerKey] && map.hasLayer(baseLayers[currentBaseLayerKey])) {
+      map.removeLayer(baseLayers[currentBaseLayerKey]);
+    }
+
+    baseLayers[key].addTo(map);
+    currentBaseLayerKey = key;
+
+    mapStyleButtons.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.basemap === key);
+    });
+
+    addConsoleLine('info', 'Base map changed to ' + key);
   }
 
   function clearAllLayers() {
@@ -619,7 +655,9 @@
     const scroll = document.createElement('div');
     scroll.className = 'chart-scroll';
 
-    const svgWidth = Math.max(900, dataset.yValues.length * 42);
+    const containerWidth = Math.max(container.clientWidth - 40, 700);
+    const preferredWidth = dataset.yValues.length * 22 + 120;
+    const svgWidth = Math.max(containerWidth, preferredWidth);
     const svgHeight = 240;
     const padL = 60;
     const padR = 20;
@@ -662,10 +700,12 @@
     axisY.setAttribute('stroke', 'rgba(255,255,255,0.25)');
     svg.appendChild(axisY);
 
-    const barWidth = 18;
+    const barSlot = plotW / Math.max(dataset.yValues.length, 1);
+    const barWidth = Math.max(6, Math.min(18, barSlot * 0.7));
 
     dataset.yValues.forEach((val, i) => {
-      const x = padL + i * 42 + 10;
+      const xCenter = padL + barSlot * i + barSlot / 2;
+      const x = xCenter - barWidth / 2;
       const h = (val / maxY) * plotH;
       const y = svgHeight - padB - h;
 
@@ -674,13 +714,13 @@
       rect.setAttribute('y', y);
       rect.setAttribute('width', barWidth);
       rect.setAttribute('height', h);
-      rect.setAttribute('rx', 3);
+      rect.setAttribute('rx', 2);
       rect.setAttribute('fill', '#3f9cff');
       svg.appendChild(rect);
 
-      if (i % Math.ceil(dataset.xValues.length / 8) === 0 || dataset.xValues.length <= 8) {
+      if (dataset.xValues.length <= 20 || i % Math.ceil(dataset.xValues.length / 10) === 0) {
         const lbl = document.createElementNS(svgNS, 'text');
-        lbl.setAttribute('x', x);
+        lbl.setAttribute('x', xCenter - 8);
         lbl.setAttribute('y', svgHeight - padB + 14);
         lbl.setAttribute('fill', '#b6c8de');
         lbl.setAttribute('font-size', '10');
@@ -1053,6 +1093,12 @@
     });
   });
 
+  mapStyleButtons.forEach(btn => {
+    btn.addEventListener('click', function () {
+      switchBaseLayer(btn.dataset.basemap);
+    });
+  });
+
   Object.keys(fixedRasterConfigs).forEach(layerKey => {
     const cfg = fixedRasterConfigs[layerKey];
 
@@ -1088,17 +1134,20 @@
 
   clearConsoleBtn.addEventListener('click', clearConsole);
   fitLayerBtn.addEventListener('click', fitActiveLayer);
-  fitLayerMapBtn.addEventListener('click', fitActiveLayer);
-
   clearLayerBtn.addEventListener('click', function () {
     clearAllLayers();
     setStatus('All layers cleared');
     addConsoleLine('warn', 'All raster layers cleared');
   });
-
   resetViewBtn.addEventListener('click', resetMapView);
-  zoomInMapBtn.addEventListener('click', function () { if (map) map.zoomIn(); });
-  zoomOutMapBtn.addEventListener('click', function () { if (map) map.zoomOut(); });
+
+  fitLayerBtnInside.addEventListener('click', fitActiveLayer);
+  clearLayerBtnInside.addEventListener('click', function () {
+    clearAllLayers();
+    setStatus('All layers cleared');
+    addConsoleLine('warn', 'All raster layers cleared');
+  });
+  resetViewBtnInside.addEventListener('click', resetMapView);
 
   generateRainfallInputsBtn.addEventListener('click', generateRainfallInputs);
   generateSoilInputsBtn.addEventListener('click', generateSoilInputs);
