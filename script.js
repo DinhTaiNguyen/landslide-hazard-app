@@ -683,12 +683,13 @@
     const scroll = document.createElement('div');
     scroll.className = 'chart-scroll';
 
-    const containerWidth = Math.max(container.clientWidth - 20, 720);
+    const cardWidth = 920;
     const pointCount = dataset.yValues.length;
+    const baseVisibleWidth = cardWidth - 60;
+    let svgWidth = baseVisibleWidth;
 
-    let svgWidth = containerWidth;
     if (pointCount > 80) {
-      svgWidth = Math.max(containerWidth, pointCount * 16);
+      svgWidth = Math.max(baseVisibleWidth, pointCount * 16);
     }
 
     const svgHeight = 250;

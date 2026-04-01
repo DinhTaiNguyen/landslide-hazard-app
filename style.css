@@ -80,11 +80,6 @@ body {
     margin-top: 2px;
 }
 
-.top-actions {
-    display: flex;
-    gap: 8px;
-}
-
 .card {
     border: 1px solid rgba(95, 150, 230, .18);
     border-radius: var(--radius);
@@ -103,10 +98,17 @@ body {
     padding: 14px;
 }
 
+.center-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
 .card-title {
     font-size: 15px;
     font-weight: 700;
     margin-bottom: 14px;
+    flex: 0 0 auto;
 }
 
 .panel-tabs {
@@ -326,8 +328,9 @@ body {
 
 .map-wrap {
     position: relative;
-    height: calc(100% - 280px);
-    min-height: 460px;
+    flex: 1 1 auto;
+    min-height: 320px;
+    height: 48%;
     border-radius: 14px;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, .06);
@@ -478,12 +481,19 @@ body {
 
 .bottom-dashboard {
     margin-top: 14px;
+    flex: 0 0 42%;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
 }
 
 .viz-tabs {
     display: flex;
     gap: 8px;
     margin-bottom: 12px;
+    flex: 0 0 auto;
 }
 
 .viz-tab {
@@ -504,6 +514,8 @@ body {
 
 .viz-panel {
     display: none;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .viz-panel.active {
@@ -517,16 +529,35 @@ body {
     padding: 12px;
 }
 
+.viz-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
 .mini-card-title {
     font-size: 14px;
     font-weight: 700;
     margin-bottom: 10px;
+    flex: 0 0 auto;
+}
+
+.viz-scroll-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: auto;
+    padding-right: 4px;
+    padding-bottom: 4px;
 }
 
 .rainfall-plot-grid {
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 12px;
+    min-width: max-content;
+    min-height: 100%;
 }
 
 .rainfall-plot-card {
@@ -534,6 +565,10 @@ body {
     border-radius: 12px;
     background: rgba(255, 255, 255, .02);
     padding: 10px;
+    min-width: 920px;
+    width: 920px;
+    min-height: 320px;
+    flex: 0 0 auto;
 }
 
 .rainfall-plot-title {
@@ -544,13 +579,14 @@ body {
 
 .chart-scroll {
     width: 100%;
+    height: 270px;
     overflow-x: auto;
     overflow-y: hidden;
-    padding-bottom: 4px;
+    padding-bottom: 6px;
 }
 
 .rainfall-chart {
-    height: 240px;
+    height: 250px;
     background: linear-gradient(180deg, rgba(32, 48, 70, .24), rgba(14, 21, 31, .12));
     border-radius: 10px;
     display: block;
@@ -562,7 +598,8 @@ body {
 }
 
 .soil-table-area {
-    overflow: auto;
+    min-width: max-content;
+    min-height: 100%;
 }
 
 .soil-table-card {
@@ -570,17 +607,23 @@ body {
     border-radius: 12px;
     background: rgba(255, 255, 255, .02);
     padding: 10px;
+    min-width: 920px;
+    width: 920px;
+    min-height: 320px;
+    flex: 0 0 auto;
 }
 
 .soil-table-scroll {
     overflow: auto;
-    max-height: 260px;
+    width: 100%;
+    height: 270px;
 }
 
 .soil-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+    min-width: 760px;
 }
 
 .soil-table th,
@@ -588,11 +631,15 @@ body {
     border: 1px solid rgba(255, 255, 255, .08);
     padding: 8px;
     text-align: left;
+    white-space: nowrap;
 }
 
 .soil-table th {
     background: rgba(255, 255, 255, .04);
     color: #e7f0ff;
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
 .layer-control-list {
@@ -720,9 +767,19 @@ body {
         grid-template-rows: 60px auto auto auto;
     }
 
+    .center-panel {
+        min-height: 950px;
+    }
+
     .map-wrap {
         min-height: 520px;
         height: 520px;
+        flex: 0 0 auto;
+    }
+
+    .bottom-dashboard {
+        min-height: 360px;
+        flex: 0 0 auto;
     }
 
     .console-content {
@@ -744,5 +801,11 @@ body {
 
     .colorbar-panel {
         width: 160px;
+    }
+
+    .rainfall-plot-card,
+    .soil-table-card {
+        min-width: 820px;
+        width: 820px;
     }
 }
