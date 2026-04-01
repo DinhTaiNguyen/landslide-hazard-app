@@ -20,12 +20,6 @@
                     <div class="brand-subtitle">Multi-layer raster and rainfall dashboard</div>
                 </div>
             </div>
-
-            <div class="top-actions">
-                <button id="resetViewBtn" class="small-btn" type="button">Reset view</button>
-                <button id="fitLayerBtn" class="small-btn" type="button">Fit active layer</button>
-                <button id="clearLayerBtn" class="small-btn" type="button">Clear all layers</button>
-            </div>
         </header>
 
         <aside class="left-panel card">
@@ -239,18 +233,29 @@
             <div class="map-wrap">
                 <div id="map"></div>
 
-                <div class="map-overlay-top">
-                    <div class="map-overlay-title">Hazard Preview</div>
-                    <div class="map-overlay-actions">
-                        <button class="map-chip active" type="button">Hazard</button>
-                        <button class="map-chip" type="button">Output</button>
+                <div class="map-overlay-controls">
+                    <div class="map-overlay-left">
+                        <div class="map-control-group">
+                            <label for="basemapSelect" class="map-control-label">Basemap</label>
+                            <select id="basemapSelect" class="map-select">
+                                <option value="osm" selected>OpenStreetMap</option>
+                                <option value="terrain">Terrain</option>
+                                <option value="voyager">Voyager</option>
+                                <option value="satellite">Satellite</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="map-overlay-right">
+                        <button id="resetViewBtn" class="small-btn" type="button">Reset view</button>
+                        <button id="fitLayerBtn" class="small-btn" type="button">Fit active layer</button>
+                        <button id="clearLayerBtn" class="small-btn" type="button">Clear all layers</button>
                     </div>
                 </div>
 
                 <div class="map-toolbar">
                     <button id="zoomInMapBtn" class="map-tool" type="button">+</button>
                     <button id="zoomOutMapBtn" class="map-tool" type="button">−</button>
-                    <button id="fitLayerMapBtn" class="map-tool" type="button">⛶</button>
                 </div>
 
                 <div id="mapEmptyNote" class="map-empty-note">

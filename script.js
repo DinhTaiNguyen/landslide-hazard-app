@@ -53,7 +53,7 @@
   const resetViewBtn = document.getElementById('resetViewBtn');
   const zoomInMapBtn = document.getElementById('zoomInMapBtn');
   const zoomOutMapBtn = document.getElementById('zoomOutMapBtn');
-  const fitLayerMapBtn = document.getElementById('fitLayerMapBtn');
+  const basemapSelect = document.getElementById('basemapSelect');
 
   const crsSelect = document.getElementById('crsSelect');
   const rasterStats = document.getElementById('rasterStats');
@@ -81,6 +81,39 @@
   let map = null;
   let rasterLayers = {};
   let activeLayerKey = null;
+  let currentBaseLayer = null;
+
+  const defaultMapView = {
+    center: [29.72, 119.96],
+    zoom: 10
+  };
+
+  const baseLayerConfigs = {
+    osm: {
+      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      options: {
+        attribution: 'Map data © OpenStreetMap contributors'
+      }
+    },
+    terrain: {
+      url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      options: {
+        attribution: 'Map data © OpenTopoMap contributors'
+      }
+    },
+    voyager: {
+      url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      options: {
+        attribution: 'Map data © OpenStreetMap contributors, © CARTO'
+      }
+    },
+    satellite: {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      options: {
+        attribution: 'Tiles © Esri'
+      }
+    }
+  };
 
   if (typeof proj4 !== 'undefined') {
     proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs +type=crs');
@@ -101,10 +134,14 @@
   }
 
   function setStatus(message) {
-    uploadStatus.textContent = message;
+    if (uploadStatus) {
+      uploadStatus.textContent = message;
+    }
   }
 
   function updateRasterStats(min, max, width, height, crsText, layerName) {
+    if (!rasterStats) return;
+
     rasterStats.innerHTML =
       'Layer: ' + layerName + '<br>' +
       'Min: ' + min.toFixed(2) + '<br>' +
@@ -120,11 +157,12 @@
     colorbarMid.textContent = mid.toFixed(2);
     colorbarMin.textContent = min.toFixed(2);
     colorbarPanel.style.display = 'block';
-    addConsoleLine('info', 'Color bar updated');
   }
 
   function hideColorbar() {
-    colorbarPanel.style.display = 'none';
+    if (colorbarPanel) {
+      colorbarPanel.style.display = 'none';
+    }
   }
 
   function clearConsole() {
@@ -140,18 +178,33 @@
     addConsoleLine('err', 'Promise error: ' + event.reason);
   });
 
+  function setBaseLayer(key) {
+    if (!map || !baseLayerConfigs[key]) return;
+
+    if (currentBaseLayer && map.hasLayer(currentBaseLayer)) {
+      map.removeLayer(currentBaseLayer);
+    }
+
+    const cfg = baseLayerConfigs[key];
+    currentBaseLayer = L.tileLayer(cfg.url, cfg.options);
+    currentBaseLayer.addTo(map);
+
+    addConsoleLine('info', 'Basemap switched to: ' + key);
+  }
+
   function initMap() {
     if (typeof L === 'undefined') {
       addConsoleLine('err', 'Leaflet did not load');
       return;
     }
 
-    map = L.map('map', { center: [29.72, 119.96], zoom: 10, zoomControl: true });
+    map = L.map('map', {
+      center: defaultMapView.center,
+      zoom: defaultMapView.zoom,
+      zoomControl: true
+    });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: 'Map data © OpenStreetMap contributors'
-    }).addTo(map);
-
+    setBaseLayer('osm');
     addConsoleLine('info', 'Map initialized');
   }
 
@@ -166,14 +219,16 @@
     activeLayerKey = null;
 
     Object.values(rasterConfigs).forEach(cfg => {
-      cfg.selectedFile.textContent = 'None';
-      cfg.viewToggle.checked = true;
-      cfg.viewToggle.disabled = true;
+      if (cfg.selectedFile) cfg.selectedFile.textContent = 'None';
+      if (cfg.viewToggle) {
+        cfg.viewToggle.checked = true;
+        cfg.viewToggle.disabled = true;
+      }
     });
 
     mapEmptyNote.style.display = 'block';
     hideColorbar();
-    rasterStats.textContent = 'No raster loaded';
+    if (rasterStats) rasterStats.textContent = 'No raster loaded';
   }
 
   function fitActiveLayer() {
@@ -191,7 +246,7 @@
 
   function resetMapView() {
     if (map) {
-      map.setView([29.72, 119.96], 10);
+      map.setView(defaultMapView.center, defaultMapView.zoom);
       addConsoleLine('info', 'Map reset to default view');
     }
   }
@@ -367,7 +422,7 @@
       activeLayerKey = null;
       mapEmptyNote.style.display = 'block';
       hideColorbar();
-      rasterStats.textContent = 'No raster loaded';
+      if (rasterStats) rasterStats.textContent = 'No raster loaded';
       return;
     }
 
@@ -402,8 +457,10 @@
       crsText: stats.crsText
     };
 
-    cfg.viewToggle.disabled = false;
-    cfg.viewToggle.checked = true;
+    if (cfg.viewToggle) {
+      cfg.viewToggle.disabled = false;
+      cfg.viewToggle.checked = true;
+    }
 
     activeLayerKey = layerKey;
     updateActiveFromVisibleLayers();
@@ -612,6 +669,9 @@
     const existing = document.getElementById(slotId);
     if (existing) existing.remove();
 
+    const empty = container.querySelector('.empty-plot-note');
+    if (empty) empty.remove();
+
     const card = document.createElement('div');
     card.className = 'rainfall-plot-card';
     card.id = slotId;
@@ -623,15 +683,24 @@
     const scroll = document.createElement('div');
     scroll.className = 'chart-scroll';
 
-    const svgWidth = Math.max(900, dataset.yValues.length * 42);
-    const svgHeight = 240;
+    const containerWidth = Math.max(container.clientWidth - 20, 720);
+    const pointCount = dataset.yValues.length;
+
+    let svgWidth = containerWidth;
+    if (pointCount > 80) {
+      svgWidth = Math.max(containerWidth, pointCount * 16);
+    }
+
+    const svgHeight = 250;
     const padL = 60;
     const padR = 20;
     const padT = 20;
-    const padB = 45;
+    const padB = 52;
     const plotW = svgWidth - padL - padR;
     const plotH = svgHeight - padT - padB;
     const maxY = Math.max(...dataset.yValues, 1);
+    const stepX = pointCount > 0 ? plotW / pointCount : plotW;
+    const barWidth = Math.max(2, Math.min(20, stepX * 0.7));
 
     const svgNS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNS, 'svg');
@@ -641,6 +710,7 @@
 
     for (let i = 0; i < 5; i++) {
       const y = padT + (plotH / 4) * i;
+
       const line = document.createElementNS(svgNS, 'line');
       line.setAttribute('x1', padL);
       line.setAttribute('x2', svgWidth - padR);
@@ -648,6 +718,16 @@
       line.setAttribute('y2', y);
       line.setAttribute('stroke', 'rgba(255,255,255,0.10)');
       svg.appendChild(line);
+
+      const val = maxY - (maxY / 4) * i;
+      const tick = document.createElementNS(svgNS, 'text');
+      tick.setAttribute('x', padL - 8);
+      tick.setAttribute('y', y + 4);
+      tick.setAttribute('fill', '#b6c8de');
+      tick.setAttribute('font-size', '10');
+      tick.setAttribute('text-anchor', 'end');
+      tick.textContent = val.toFixed(2);
+      svg.appendChild(tick);
     }
 
     const axisX = document.createElementNS(svgNS, 'line');
@@ -666,10 +746,17 @@
     axisY.setAttribute('stroke', 'rgba(255,255,255,0.25)');
     svg.appendChild(axisY);
 
-    const barWidth = 18;
+    const labelStep = pointCount <= 12
+      ? 1
+      : pointCount <= 30
+        ? 2
+        : pointCount <= 60
+          ? Math.ceil(pointCount / 12)
+          : Math.ceil(pointCount / 14);
 
     dataset.yValues.forEach((val, i) => {
-      const x = padL + i * 42 + 10;
+      const centerX = padL + i * stepX + stepX / 2;
+      const x = centerX - barWidth / 2;
       const h = (val / maxY) * plotH;
       const y = svgHeight - padB - h;
 
@@ -678,16 +765,17 @@
       rect.setAttribute('y', y);
       rect.setAttribute('width', barWidth);
       rect.setAttribute('height', h);
-      rect.setAttribute('rx', 3);
+      rect.setAttribute('rx', 2);
       rect.setAttribute('fill', '#3f9cff');
       svg.appendChild(rect);
 
-      if (i % Math.ceil(dataset.xValues.length / 8) === 0 || dataset.xValues.length <= 8) {
+      if (i % labelStep === 0 || i === pointCount - 1) {
         const lbl = document.createElementNS(svgNS, 'text');
-        lbl.setAttribute('x', x);
-        lbl.setAttribute('y', svgHeight - padB + 14);
+        lbl.setAttribute('x', centerX);
+        lbl.setAttribute('y', svgHeight - padB + 15);
         lbl.setAttribute('fill', '#b6c8de');
         lbl.setAttribute('font-size', '10');
+        lbl.setAttribute('text-anchor', 'middle');
         lbl.textContent = String(dataset.xValues[i]).slice(0, 10);
         svg.appendChild(lbl);
       }
@@ -702,10 +790,11 @@
     svg.appendChild(yTitle);
 
     const xTitle = document.createElementNS(svgNS, 'text');
-    xTitle.setAttribute('x', svgWidth / 2 - 30);
+    xTitle.setAttribute('x', svgWidth / 2);
     xTitle.setAttribute('y', svgHeight - 8);
     xTitle.setAttribute('fill', '#dbe6f7');
     xTitle.setAttribute('font-size', '12');
+    xTitle.setAttribute('text-anchor', 'middle');
     xTitle.textContent = dataset.xLabel;
     svg.appendChild(xTitle);
 
@@ -734,6 +823,9 @@
   function drawSoilTable(container, dataset, title, slotId) {
     const existing = document.getElementById(slotId);
     if (existing) existing.remove();
+
+    const empty = container.querySelector('.empty-plot-note');
+    if (empty) empty.remove();
 
     const card = document.createElement('div');
     card.className = 'soil-table-card';
@@ -816,9 +908,6 @@
         const text = await file.text();
         const dataset = parseRainfallText(text);
 
-        const empty = rainfallPlotArea.querySelector('.empty-plot-note');
-        if (empty) empty.remove();
-
         drawRainfallChart(
           rainfallPlotArea,
           dataset,
@@ -878,9 +967,6 @@
       try {
         const text = await file.text();
         const dataset = parseSoilText(text);
-
-        const empty = soilTableArea.querySelector('.empty-plot-note');
-        if (empty) empty.remove();
 
         drawSoilTable(
           soilTableArea,
@@ -953,39 +1039,42 @@
   Object.keys(rasterConfigs).forEach(layerKey => {
     const cfg = rasterConfigs[layerKey];
 
-    cfg.input.addEventListener('change', function (e) {
-      const file = e.target.files[0];
-      if (!file) {
-        addConsoleLine('warn', 'No file selected for ' + layerKey);
-        return;
-      }
-      handleRasterFile(file, layerKey, cfg.label);
-    });
-
-    cfg.viewToggle.addEventListener('change', function () {
-      const layerObj = rasterLayers[layerKey];
-      if (!layerObj) return;
-
-      layerObj.visible = cfg.viewToggle.checked;
-
-      if (cfg.viewToggle.checked) {
-        layerObj.layer.addTo(map);
-        activeLayerKey = layerKey;
-        updateActiveFromVisibleLayers();
-        addConsoleLine('info', cfg.label + ' turned on');
-      } else {
-        if (map.hasLayer(layerObj.layer)) {
-          map.removeLayer(layerObj.layer);
+    if (cfg.input) {
+      cfg.input.addEventListener('change', function (e) {
+        const file = e.target.files[0];
+        if (!file) {
+          addConsoleLine('warn', 'No file selected for ' + layerKey);
+          return;
         }
-        addConsoleLine('warn', cfg.label + ' turned off');
-        updateActiveFromVisibleLayers();
-      }
-    });
+        handleRasterFile(file, layerKey, cfg.label);
+      });
+    }
+
+    if (cfg.viewToggle) {
+      cfg.viewToggle.addEventListener('change', function () {
+        const layerObj = rasterLayers[layerKey];
+        if (!layerObj) return;
+
+        layerObj.visible = cfg.viewToggle.checked;
+
+        if (cfg.viewToggle.checked) {
+          layerObj.layer.addTo(map);
+          activeLayerKey = layerKey;
+          updateActiveFromVisibleLayers();
+          addConsoleLine('info', cfg.label + ' turned on');
+        } else {
+          if (map.hasLayer(layerObj.layer)) {
+            map.removeLayer(layerObj.layer);
+          }
+          addConsoleLine('warn', cfg.label + ' turned off');
+          updateActiveFromVisibleLayers();
+        }
+      });
+    }
   });
 
   clearConsoleBtn.addEventListener('click', clearConsole);
   fitLayerBtn.addEventListener('click', fitActiveLayer);
-  fitLayerMapBtn.addEventListener('click', fitActiveLayer);
 
   clearLayerBtn.addEventListener('click', function () {
     clearAllLayers();
@@ -996,6 +1085,12 @@
   resetViewBtn.addEventListener('click', resetMapView);
   zoomInMapBtn.addEventListener('click', function () { if (map) map.zoomIn(); });
   zoomOutMapBtn.addEventListener('click', function () { if (map) map.zoomOut(); });
+
+  if (basemapSelect) {
+    basemapSelect.addEventListener('change', function () {
+      setBaseLayer(this.value);
+    });
+  }
 
   generateRainfallInputsBtn.addEventListener('click', generateRainfallInputs);
   generateSoilInputsBtn.addEventListener('click', generateSoilInputs);
