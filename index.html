@@ -5,6 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Landslide Hazard App</title>
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css" />
 </head>
@@ -16,7 +17,7 @@
                 <div class="brand-mark"></div>
                 <div>
                     <div class="brand-title">LandSlide Predictor Pro</div>
-                    <div class="brand-subtitle">Netlify starter version</div>
+                    <div class="brand-subtitle">Raster upload, CRS transform, and preview</div>
                 </div>
             </div>
 
@@ -30,6 +31,13 @@
         <aside class="left-panel card">
             <div class="card-title">Data Input</div>
 
+            <div class="panel-tabs">
+                <button class="panel-tab active" type="button">DEM Data</button>
+                <button class="panel-tab" type="button">Rainfall</button>
+                <button class="panel-tab" type="button">Soil</button>
+                <button class="panel-tab" type="button">Geo</button>
+            </div>
+
             <input id="fileInput" type="file" accept=".asc,.tif,.tiff" hidden />
 
             <label for="fileInput" id="dropBox" class="dropbox">
@@ -38,24 +46,35 @@
                 <div class="dropbox-subtitle">Click or drag .asc, .tif, or .tiff here</div>
             </label>
 
-            <div class="field-group">
-                <div class="field-label">Selected file</div>
-                <div id="selectedFile" class="field-box">None</div>
-            </div>
+            <div class="field-grid">
+                <div class="field-group">
+                    <div class="field-label">Selected file</div>
+                    <div id="selectedFile" class="field-box">None</div>
+                </div>
 
-            <div class="field-group">
-                <div class="field-label">Status</div>
-                <div id="uploadStatus" class="field-box">Waiting for file...</div>
-            </div>
+                <div class="field-group">
+                    <div class="field-label">Status</div>
+                    <div id="uploadStatus" class="field-box">Waiting for file...</div>
+                </div>
 
-            <div class="field-group">
-                <div class="field-label">Coordinate Reference System</div>
-                <select id="crsSelect" class="field-select">
-                    <option value="auto">Auto detect</option>
-                    <option value="EPSG:4326">EPSG:4326 - WGS84</option>
-                    <option value="EPSG:3857">EPSG:3857 - Web Mercator</option>
-                    <option value="EPSG:4549">EPSG:4549 - CGCS2000 / 3-degree Gauss-Kruger CM 120E</option>
-                </select>
+                <div class="field-group">
+                    <div class="field-label">Coordinate Reference System</div>
+                    <select id="crsSelect" class="field-select">
+                        <option value="auto">Auto detect</option>
+                        <option value="EPSG:4326">EPSG:4326 - WGS84</option>
+                        <option value="EPSG:4490">EPSG:4490 - CGCS2000 geographic</option>
+                        <option value="EPSG:3857">EPSG:3857 - Web Mercator</option>
+                        <option value="EPSG:4549">EPSG:4549 - CGCS2000 / 3° GK CM 120E</option>
+                    </select>
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label">Placement mode</div>
+                    <select id="placementMode" class="field-select">
+                        <option value="fit">Fit map to raster</option>
+                        <option value="keep">Keep current map view</option>
+                    </select>
+                </div>
             </div>
 
             <div class="field-group">
@@ -63,34 +82,44 @@
                 <div id="rasterStats" class="field-box">No raster loaded</div>
             </div>
 
-            <div class="field-group">
-                <div class="field-label">Tips</div>
-                <div class="field-box small-text">
-                    Start by uploading <strong>pit.asc</strong> first.<br />
-                    This version displays ASC reliably and also supports TIFF preview.<br /><br />
-                    For projected CRS such as <strong>EPSG:4549</strong>, this version currently shows a preview using
-                    fallback bounds unless the raster is already geographic.
+            <div class="info-card">
+                <div class="info-card-title">How CRS placement works</div>
+                <div class="small-text">
+                    If your ASC is in projected coordinates like EPSG:4549, choose that CRS first, then upload.
+                    The app will transform the raster corner coordinates to WGS84 and place the overlay on the map.
                 </div>
+            </div>
+
+            <div class="status-card">
+                <div class="status-card-title">Status</div>
+                <div class="status-line">Data integrity: <span class="good-text">Ready</span></div>
+                <div class="status-bar"><span></span></div>
             </div>
         </aside>
 
         <main class="center-panel card">
-            <div class="card-title">Map Preview</div>
+            <div class="card-title">Landslide Hazard Prediction Map</div>
 
             <div class="map-wrap">
                 <div id="map"></div>
 
                 <div class="map-overlay-top">
-                    <div class="map-overlay-title">Landslide Hazard Prediction Map</div>
+                    <div class="map-overlay-title">Hazard Preview</div>
                     <div class="map-overlay-actions">
                         <button class="map-chip active" type="button">Hazard</button>
                         <button class="map-chip" type="button">Output</button>
                     </div>
                 </div>
 
+                <div class="map-toolbar">
+                    <button id="zoomInMapBtn" class="map-tool" type="button">+</button>
+                    <button id="zoomOutMapBtn" class="map-tool" type="button">−</button>
+                    <button id="fitLayerMapBtn" class="map-tool" type="button">⛶</button>
+                </div>
+
                 <div id="mapEmptyNote" class="map-empty-note">
                     Upload a raster to display it here
-                    <small>The console on the right will show every step.</small>
+                    <small>Choose the correct CRS first if your raster uses projected coordinates.</small>
                 </div>
 
                 <div id="colorbarPanel" class="colorbar-panel" style="display:none;">
@@ -108,16 +137,45 @@
         </main>
 
         <aside class="right-panel card">
-            <div class="card-title">Console</div>
-            <div class="console-toolbar">
-                <button id="clearConsoleBtn" class="small-btn" type="button">Clear</button>
+            <div class="card-title">Model / Runtime Panel</div>
+
+            <div class="config-card">
+                <div class="config-card-title">Model Configuration</div>
+                <div class="fake-tabs">
+                    <span class="fake-tab active">GeoTop</span>
+                    <span class="fake-tab">FORM</span>
+                    <span class="fake-tab">ML</span>
+                </div>
+
+                <div class="mini-setting">
+                    <div class="field-label">Hydrological Model</div>
+                    <div class="field-box">Hydrological Model</div>
+                </div>
+
+                <div class="mini-setting">
+                    <div class="field-label">Boundary Conditions</div>
+                    <div class="field-box">Inflow / Outflow</div>
+                </div>
+
+                <div class="mini-setting">
+                    <div class="field-label">ML Calibration</div>
+                    <div class="field-box">Random Forest / SVM</div>
+                </div>
             </div>
-            <div id="consoleContent" class="console-content"></div>
+
+            <div class="console-block">
+                <div class="console-header">
+                    <span>Console</span>
+                    <button id="clearConsoleBtn" class="small-btn" type="button">Clear</button>
+                </div>
+                <div id="consoleContent" class="console-content"></div>
+            </div>
         </aside>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js"></script>
     <script src="script.js"></script>
 </body>
 

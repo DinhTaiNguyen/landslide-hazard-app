@@ -9,8 +9,12 @@
   const fitLayerBtn = document.getElementById('fitLayerBtn');
   const clearLayerBtn = document.getElementById('clearLayerBtn');
   const resetViewBtn = document.getElementById('resetViewBtn');
+  const zoomInMapBtn = document.getElementById('zoomInMapBtn');
+  const zoomOutMapBtn = document.getElementById('zoomOutMapBtn');
+  const fitLayerMapBtn = document.getElementById('fitLayerMapBtn');
 
   const crsSelect = document.getElementById('crsSelect');
+  const placementMode = document.getElementById('placementMode');
   const rasterStats = document.getElementById('rasterStats');
   const colorbarPanel = document.getElementById('colorbarPanel');
   const colorbarMin = document.getElementById('colorbarMin');
@@ -20,6 +24,13 @@
   let map = null;
   let currentRasterLayer = null;
   let currentRasterBounds = null;
+
+  if (typeof proj4 !== 'undefined') {
+    proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs +type=crs');
+    proj4.defs('EPSG:4490', '+proj=longlat +ellps=GRS80 +no_defs +type=crs');
+    proj4.defs('EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs +type=crs');
+    proj4.defs('EPSG:4549', '+proj=tmerc +lat_0=0 +lon_0=120 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs +type=crs');
+  }
 
   function addConsoleLine(type, message) {
     const line = document.createElement('div');
@@ -47,9 +58,9 @@
   function updateColorbar(min, max) {
     if (!Number.isFinite(min) || !Number.isFinite(max)) return;
     const mid = (min + max) / 2;
-    colorbarMin.textContent = max.toFixed(2);
+    colorbarMax.textContent = max.toFixed(2);
     colorbarMid.textContent = mid.toFixed(2);
-    colorbarMax.textContent = min.toFixed(2);
+    colorbarMin.textContent = min.toFixed(2);
     colorbarPanel.style.display = 'block';
     addConsoleLine('info', 'Color bar updated');
   }
@@ -77,7 +88,7 @@
       return;
     }
 
-    map = L.map('map', { center: [0, 0], zoom: 2, zoomControl: true });
+    map = L.map('map', { center: [30, 120], zoom: 8, zoomControl: true });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: 'Map data © OpenStreetMap contributors'
@@ -105,7 +116,7 @@
 
   function resetMapView() {
     if (map) {
-      map.setView([0, 0], 2);
+      map.setView([30, 120], 8);
       addConsoleLine('info', 'Map reset to default view');
     }
   }
@@ -225,6 +236,42 @@
     );
   }
 
+  function transformPointToWGS84(x, y, sourceCRS) {
+    if (!proj4) throw new Error('proj4 not loaded');
+
+    if (sourceCRS === 'EPSG:4326' || sourceCRS === 'EPSG:4490') {
+      return [x, y];
+    }
+
+    return proj4(sourceCRS, 'EPSG:4326', [x, y]);
+  }
+
+  function ascBoundsToLatLngBounds(asc, selectedCRS) {
+    const xMin = asc.xll;
+    const yMin = asc.yll;
+    const xMax = asc.xll + asc.width * asc.cellsize;
+    const yMax = asc.yll + asc.height * asc.cellsize;
+
+    if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) {
+      return [
+        [yMin, xMin],
+        [yMax, xMax]
+      ];
+    }
+
+    if (selectedCRS === 'EPSG:3857' || selectedCRS === 'EPSG:4549') {
+      const ll = transformPointToWGS84(xMin, yMin, selectedCRS);
+      const ur = transformPointToWGS84(xMax, yMax, selectedCRS);
+
+      return [
+        [ll[1], ll[0]],
+        [ur[1], ur[0]]
+      ];
+    }
+
+    return [[-20, -20], [20, 20]];
+  }
+
   function addAscLayer(asc, fileName) {
     clearCurrentLayer();
 
@@ -235,30 +282,33 @@
     let crsText = 'Auto detect';
     const selectedCRS = crsSelect ? crsSelect.value : 'auto';
 
-    if (selectedCRS === 'EPSG:4326' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) {
-      bounds = [
-        [asc.yll, asc.xll],
-        [asc.yll + asc.height * asc.cellsize, asc.xll + asc.width * asc.cellsize]
-      ];
-      crsText = 'EPSG:4326 / geographic';
-      addConsoleLine('info', 'ASC displayed using geographic bounds');
-    } else if (selectedCRS === 'EPSG:4549') {
+    try {
+      bounds = ascBoundsToLatLngBounds(asc, selectedCRS);
+
+      if (selectedCRS === 'auto') {
+        if (ascLooksGeographic(asc)) {
+          crsText = 'Auto → EPSG:4326 geographic';
+          addConsoleLine('info', 'ASC auto-detected as geographic');
+        } else {
+          crsText = 'Auto → fallback preview';
+          addConsoleLine('warn', 'Auto detect could not confirm projected CRS');
+        }
+      } else {
+        crsText = selectedCRS;
+        addConsoleLine('info', 'ASC displayed using selected CRS: ' + selectedCRS);
+      }
+    } catch (err) {
       bounds = [[-20, -20], [20, 20]];
-      crsText = 'EPSG:4549 selected (preview only)';
-      addConsoleLine('warn', 'EPSG:4549 selected. Browser preview uses fallback bounds only.');
-    } else if (selectedCRS === 'EPSG:3857') {
-      bounds = [[-20, -20], [20, 20]];
-      crsText = 'EPSG:3857 selected (preview only)';
-      addConsoleLine('warn', 'EPSG:3857 selected. Browser preview uses fallback bounds only.');
-    } else {
-      bounds = [[-20, -20], [20, 20]];
-      crsText = 'Unknown / fallback preview';
-      addConsoleLine('warn', 'ASC not in lat/lon; using fallback bounds');
+      crsText = selectedCRS + ' (fallback preview)';
+      addConsoleLine('warn', 'CRS transform failed, using fallback bounds: ' + err.message);
     }
 
     currentRasterLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
     currentRasterBounds = bounds;
-    map.fitBounds(bounds, { padding: [20, 20] });
+
+    if (!placementMode || placementMode.value === 'fit') {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
 
     mapEmptyNote.style.display = 'none';
     setStatus('Loaded ' + fileName);
@@ -274,6 +324,7 @@
 
     clearCurrentLayer();
     addConsoleLine('info', 'Reading TIFF array buffer');
+
     const buffer = await file.arrayBuffer();
     const tiff = await GeoTIFF.fromArrayBuffer(buffer);
     const image = await tiff.getImage();
@@ -299,6 +350,7 @@
 
     try {
       const bbox = image.getBoundingBox();
+
       if (
         bbox && bbox.length === 4 &&
         bbox[0] >= -180 && bbox[0] <= 180 &&
@@ -318,7 +370,10 @@
 
     currentRasterLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
     currentRasterBounds = bounds;
-    map.fitBounds(bounds, { padding: [20, 20] });
+
+    if (!placementMode || placementMode.value === 'fit') {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
 
     mapEmptyNote.style.display = 'none';
     setStatus('Loaded ' + file.name);
@@ -387,6 +442,7 @@
 
   clearConsoleBtn.addEventListener('click', clearConsole);
   fitLayerBtn.addEventListener('click', fitCurrentLayer);
+  fitLayerMapBtn.addEventListener('click', fitCurrentLayer);
 
   clearLayerBtn.addEventListener('click', function () {
     clearCurrentLayer();
@@ -398,8 +454,10 @@
   });
 
   resetViewBtn.addEventListener('click', resetMapView);
+  zoomInMapBtn.addEventListener('click', function () { if (map) map.zoomIn(); });
+  zoomOutMapBtn.addEventListener('click', function () { if (map) map.zoomOut(); });
 
   initMap();
   addConsoleLine('info', 'System initialized');
-  addConsoleLine('info', 'Ready. Upload pit.asc first.');
+  addConsoleLine('info', 'Ready. Choose CRS first if your raster is projected.');
 })();
