@@ -174,56 +174,24 @@
 
             <!-- GEO PANEL -->
             <div id="geoPanel" class="left-subpanel">
-                <div class="upload-section">
-                    <div class="upload-section-title-row">
-                        <span class="upload-section-title">Land Use Map</span>
-                        <label class="view-toggle-wrap">
-                            <input id="landUseViewToggle" type="checkbox" checked disabled />
-                            <span>View</span>
-                        </label>
+                <div class="field-group">
+                    <div class="field-label">How many geo files?</div>
+                    <div class="inline-controls">
+                        <input id="geoCountInput" class="number-input" type="number" min="1" value="3" />
+                        <button id="generateGeoInputsBtn" class="small-btn" type="button">Generate</button>
                     </div>
-                    <input id="landUseFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="landUseFileInput" class="dropbox">
-                        <div class="dropbox-icon">⤒</div>
-                        <div class="dropbox-title">Upload Land Use raster</div>
-                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
-                    </label>
-                    <div id="landUseSelectedFile" class="field-box compact-box">None</div>
                 </div>
 
-                <div class="upload-section">
-                    <div class="upload-section-title-row">
-                        <span class="upload-section-title">Vegetation Map</span>
-                        <label class="view-toggle-wrap">
-                            <input id="vegetationViewToggle" type="checkbox" checked disabled />
-                            <span>View</span>
-                        </label>
+                <div class="field-group">
+                    <div class="field-label">Geo file instructions</div>
+                    <div class="field-box small-text">
+                        Upload geo-environmental raster maps such as land use, vegetation, lithology, geology, or other
+                        thematic layers.
+                        Each uploaded map has a View checkbox to turn it on or off in the map.
                     </div>
-                    <input id="vegetationFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="vegetationFileInput" class="dropbox">
-                        <div class="dropbox-icon">⤒</div>
-                        <div class="dropbox-title">Upload Vegetation raster</div>
-                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
-                    </label>
-                    <div id="vegetationSelectedFile" class="field-box compact-box">None</div>
                 </div>
 
-                <div class="upload-section">
-                    <div class="upload-section-title-row">
-                        <span class="upload-section-title">Lithology Map</span>
-                        <label class="view-toggle-wrap">
-                            <input id="lithologyViewToggle" type="checkbox" checked disabled />
-                            <span>View</span>
-                        </label>
-                    </div>
-                    <input id="lithologyFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="lithologyFileInput" class="dropbox">
-                        <div class="dropbox-icon">⤒</div>
-                        <div class="dropbox-title">Upload Lithology raster</div>
-                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
-                    </label>
-                    <div id="lithologySelectedFile" class="field-box compact-box">None</div>
-                </div>
+                <div id="geoUploadContainer"></div>
             </div>
         </aside>
 
@@ -273,20 +241,22 @@
                     <button class="viz-tab" type="button" data-viz="soilVizPanel">Soil input visualise</button>
                 </div>
 
-                <div id="rainfallVizPanel" class="viz-panel active">
-                    <div class="mini-card">
-                        <div class="mini-card-title">Rainfall Intensity</div>
-                        <div id="rainfallPlotArea" class="rainfall-plot-grid">
-                            <div class="empty-plot-note">No rainfall files uploaded yet</div>
+                <div class="viz-box">
+                    <div id="rainfallVizPanel" class="viz-panel active">
+                        <div class="mini-card">
+                            <div class="mini-card-title">Rainfall Intensity</div>
+                            <div id="rainfallPlotArea" class="rainfall-plot-grid">
+                                <div class="empty-plot-note">No rainfall files uploaded yet</div>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div id="soilVizPanel" class="viz-panel">
-                    <div class="mini-card">
-                        <div class="mini-card-title">Soil Input Table</div>
-                        <div id="soilTableArea" class="soil-table-area">
-                            <div class="empty-plot-note">No soil files uploaded yet</div>
+                    <div id="soilVizPanel" class="viz-panel">
+                        <div class="mini-card">
+                            <div class="mini-card-title">Soil Input Table</div>
+                            <div id="soilTableArea" class="soil-table-area">
+                                <div class="empty-plot-note">No soil files uploaded yet</div>
+                            </div>
                         </div>
                     </div>
                 </div>
