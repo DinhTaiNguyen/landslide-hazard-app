@@ -281,6 +281,7 @@
                     <button class="viz-tab active" type="button" data-viz="rainfallVizPanel">Rainfall input
                         visualise</button>
                     <button class="viz-tab" type="button" data-viz="soilVizPanel">Soil input visualise</button>
+                    <button class="viz-tab" type="button" data-viz="geotopVizPanel">GeoTOP input</button>
                 </div>
 
                 <div id="rainfallVizPanel" class="viz-panel active">
@@ -300,33 +301,117 @@
                         </div>
                     </div>
                 </div>
+
+                <div id="geotopVizPanel" class="viz-panel">
+                    <div class="mini-card viz-card">
+                        <div class="mini-card-title">GeoTOP input</div>
+                        <div id="geotopSummaryArea" class="soil-table-area viz-scroll-area">
+                            <div class="empty-plot-note">No GeoTOP configuration uploaded yet</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
 
         <aside class="right-panel card">
             <div class="card-title">Model / Runtime Panel</div>
 
-            <div class="config-card">
-                <div class="config-card-title">Model Configuration</div>
-                <div class="fake-tabs">
-                    <span class="fake-tab active">GeoTop</span>
-                    <span class="fake-tab">FORM</span>
-                    <span class="fake-tab">ML</span>
-                </div>
+            <div class="right-tabs">
+                <button class="right-tab active" type="button" data-right-panel="geotopRightPanel">GeoTOP</button>
+                <button class="right-tab" type="button" data-right-panel="formRightPanel">FORM</button>
+                <button class="right-tab" type="button" data-right-panel="mlRightPanel">Machine Learning</button>
+            </div>
 
-                <div class="mini-setting">
-                    <div class="field-label">Hydrological Model</div>
-                    <div class="field-box">Hydrological Model</div>
-                </div>
+            <!-- GeoTOP TAB -->
+            <div id="geotopRightPanel" class="right-subpanel active">
+                <div class="config-card">
+                    <div class="config-card-title">GeoTOP Configuration</div>
 
-                <div class="mini-setting">
-                    <div class="field-label">Boundary Conditions</div>
-                    <div class="field-box">Inflow / Outflow</div>
-                </div>
+                    <div class="upload-section">
+                        <input id="geotopConfigInput" type="file" accept=".txt,.cfg,.ini,.asc,.dat" hidden />
+                        <label for="geotopConfigInput" class="dropbox">
+                            <div class="dropbox-icon">⤒</div>
+                            <div class="dropbox-title">Upload GeoTOP configuration</div>
+                            <div class="dropbox-subtitle">TXT, CFG, INI, DAT</div>
+                        </label>
+                        <div id="geotopConfigFileName" class="field-box compact-box">None</div>
+                    </div>
 
-                <div class="mini-setting">
-                    <div class="field-label">ML Calibration</div>
-                    <div class="field-box">Random Forest / SVM</div>
+                    <div class="field-group">
+                        <div class="field-label">Status</div>
+                        <div id="geotopConfigStatus" class="field-box">Waiting for GeoTOP configuration...</div>
+                    </div>
+
+                    <div class="button-row">
+                        <button id="runGeotopBtn" class="primary-btn" type="button">Run simulation</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FORM TAB -->
+            <div id="formRightPanel" class="right-subpanel">
+                <div class="config-card">
+                    <div class="config-card-title">FORM Parameters</div>
+
+                    <div class="field-group">
+                        <div class="field-label">How many soil types?</div>
+                        <div class="inline-controls">
+                            <input id="formSoilTypeCount" class="number-input" type="number" min="1" value="1" />
+                            <button id="generateFormInputsBtn" class="small-btn" type="button">Generate</button>
+                        </div>
+                    </div>
+
+                    <div id="formSoilTypeContainer"></div>
+
+                    <div class="button-row">
+                        <button id="runFormBtn" class="primary-btn" type="button">Run FORM to calculate PoF</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ML TAB -->
+            <div id="mlRightPanel" class="right-subpanel">
+                <div class="config-card">
+                    <div class="config-card-title">Machine Learning</div>
+
+                    <div class="field-group">
+                        <div class="field-label">Hyperparameters</div>
+                        <textarea id="mlHyperparameters" class="hyperparam-box"># Hyperparameters
+BATCH_SIZE_STAGE1 = 8192
+BATCH_SIZE_STAGE2 = 4096
+EPOCHS_STAGE1 = 80
+EPOCHS_STAGE2 = 100
+LR_STAGE1 = 1e-3
+LR_STAGE2 = 1e-3
+WEIGHT_DECAY = 1e-5
+PATIENCE_STAGE1 = 10
+PATIENCE_STAGE2 = 15
+MIN_DELTA = 1e-5
+
+STAGE2_TRAIN_FRAC = 0.60
+STAGE2_VAL_FRAC = 0.20
+STAGE2_TEST_FRAC = 0.20
+
+CLASS_THRESHOLD = 0.5</textarea>
+                    </div>
+
+                    <div class="upload-section">
+                        <input id="mlInventoryInput" type="file" accept=".csv,.txt,.shp,.geojson,.json" multiple
+                            hidden />
+                        <label for="mlInventoryInput" class="dropbox">
+                            <div class="dropbox-icon">⤒</div>
+                            <div class="dropbox-title">Upload landslide inventory</div>
+                            <div class="dropbox-subtitle">One or many files</div>
+                        </label>
+                        <div id="mlInventoryFileList" class="field-box compact-box">None</div>
+                    </div>
+
+                    <div class="button-column">
+                        <button id="mlTrainingBtn" class="primary-btn" type="button">Training</button>
+                        <button id="mlFastPredictionBtn" class="primary-btn" type="button">Fast Prediction</button>
+                        <button id="mlArPredictionBtn" class="primary-btn" type="button">Augmented-Reality
+                            Prediction</button>
+                    </div>
                 </div>
             </div>
 

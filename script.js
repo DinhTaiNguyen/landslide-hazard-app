@@ -72,11 +72,32 @@
   const soilUploadContainer = document.getElementById('soilUploadContainer');
   const soilTableArea = document.getElementById('soilTableArea');
 
+  const geotopConfigInput = document.getElementById('geotopConfigInput');
+  const geotopConfigFileName = document.getElementById('geotopConfigFileName');
+  const geotopConfigStatus = document.getElementById('geotopConfigStatus');
+  const geotopSummaryArea = document.getElementById('geotopSummaryArea');
+  const runGeotopBtn = document.getElementById('runGeotopBtn');
+
+  const formSoilTypeCount = document.getElementById('formSoilTypeCount');
+  const generateFormInputsBtn = document.getElementById('generateFormInputsBtn');
+  const formSoilTypeContainer = document.getElementById('formSoilTypeContainer');
+  const runFormBtn = document.getElementById('runFormBtn');
+
+  const mlHyperparameters = document.getElementById('mlHyperparameters');
+  const mlInventoryInput = document.getElementById('mlInventoryInput');
+  const mlInventoryFileList = document.getElementById('mlInventoryFileList');
+  const mlTrainingBtn = document.getElementById('mlTrainingBtn');
+  const mlFastPredictionBtn = document.getElementById('mlFastPredictionBtn');
+  const mlArPredictionBtn = document.getElementById('mlArPredictionBtn');
+
   const panelTabs = document.querySelectorAll('.panel-tab');
   const subPanels = document.querySelectorAll('.left-subpanel');
 
   const vizTabs = document.querySelectorAll('.viz-tab');
   const vizPanels = document.querySelectorAll('.viz-panel');
+
+  const rightTabs = document.querySelectorAll('.right-tab');
+  const rightSubPanels = document.querySelectorAll('.right-subpanel');
 
   let map = null;
   let rasterLayers = {};
@@ -91,27 +112,19 @@
   const baseLayerConfigs = {
     osm: {
       url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      options: {
-        attribution: 'Map data © OpenStreetMap contributors'
-      }
+      options: { attribution: 'Map data © OpenStreetMap contributors' }
     },
     terrain: {
       url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-      options: {
-        attribution: 'Map data © OpenTopoMap contributors'
-      }
+      options: { attribution: 'Map data © OpenTopoMap contributors' }
     },
     voyager: {
       url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      options: {
-        attribution: 'Map data © OpenStreetMap contributors, © CARTO'
-      }
+      options: { attribution: 'Map data © OpenStreetMap contributors, © CARTO' }
     },
     satellite: {
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      options: {
-        attribution: 'Tiles © Esri'
-      }
+      options: { attribution: 'Tiles © Esri' }
     }
   };
 
@@ -134,14 +147,11 @@
   }
 
   function setStatus(message) {
-    if (uploadStatus) {
-      uploadStatus.textContent = message;
-    }
+    if (uploadStatus) uploadStatus.textContent = message;
   }
 
   function updateRasterStats(min, max, width, height, crsText, layerName) {
     if (!rasterStats) return;
-
     rasterStats.innerHTML =
       'Layer: ' + layerName + '<br>' +
       'Min: ' + min.toFixed(2) + '<br>' +
@@ -160,9 +170,7 @@
   }
 
   function hideColorbar() {
-    if (colorbarPanel) {
-      colorbarPanel.style.display = 'none';
-    }
+    if (colorbarPanel) colorbarPanel.style.display = 'none';
   }
 
   function clearConsole() {
@@ -393,10 +401,7 @@
     addConsoleLine('info', 'ASC raw bounds: xMin=' + xMin + ', yMin=' + yMin + ', xMax=' + xMax + ', yMax=' + yMax);
 
     if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) {
-      return [
-        [yMin, xMin],
-        [yMax, xMax]
-      ];
+      return [[yMin, xMin], [yMax, xMax]];
     }
 
     if (selectedCRS === 'EPSG:3857' || selectedCRS === 'EPSG:4549') {
@@ -406,10 +411,7 @@
       addConsoleLine('info', 'Transformed lower-left: lon=' + ll[0] + ', lat=' + ll[1]);
       addConsoleLine('info', 'Transformed upper-right: lon=' + ur[0] + ', lat=' + ur[1]);
 
-      return [
-        [ll[1], ll[0]],
-        [ur[1], ur[0]]
-      ];
+      return [[ll[1], ll[0]], [ur[1], ur[0]]];
     }
 
     throw new Error('Unsupported CRS selection: ' + selectedCRS);
@@ -625,6 +627,16 @@
 
     vizPanels.forEach(panel => {
       panel.classList.toggle('active', panel.id === vizId);
+    });
+  }
+
+  function activateRightPanel(panelId) {
+    rightTabs.forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.rightPanel === panelId);
+    });
+
+    rightSubPanels.forEach(panel => {
+      panel.classList.toggle('active', panel.id === panelId);
     });
   }
 
@@ -871,6 +883,84 @@
     container.appendChild(card);
   }
 
+  function parseGeotopConfig(text) {
+    const lines = text.replace(/\r/g, '').split('\n');
+    const results = [];
+
+    lines.forEach(line => {
+      let trimmed = line.trim();
+      if (!trimmed) return;
+      if (trimmed.startsWith('!')) return;
+      if (!trimmed.includes('=')) return;
+
+      const parts = trimmed.split('=');
+      const key = parts[0].trim();
+      const value = parts.slice(1).join('=').trim();
+
+      if (!key) return;
+      results.push({ name: key, value: value });
+    });
+
+    return results;
+  }
+
+  function drawNameValueTable(container, rows, title, slotId) {
+    const existing = document.getElementById(slotId);
+    if (existing) existing.remove();
+
+    const empty = container.querySelector('.empty-plot-note');
+    if (empty) empty.remove();
+
+    const card = document.createElement('div');
+    card.className = 'soil-table-card';
+    card.id = slotId;
+
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'rainfall-plot-title';
+    titleDiv.textContent = title;
+
+    const scroll = document.createElement('div');
+    scroll.className = 'soil-table-scroll';
+
+    const table = document.createElement('table');
+    table.className = 'soil-table';
+
+    const thead = document.createElement('thead');
+    const trHead = document.createElement('tr');
+
+    const th1 = document.createElement('th');
+    th1.textContent = 'Name';
+    const th2 = document.createElement('th');
+    th2.textContent = 'Value';
+
+    trHead.appendChild(th1);
+    trHead.appendChild(th2);
+    thead.appendChild(trHead);
+
+    const tbody = document.createElement('tbody');
+    rows.forEach(item => {
+      const tr = document.createElement('tr');
+
+      const td1 = document.createElement('td');
+      td1.textContent = item.name;
+
+      const td2 = document.createElement('td');
+      td2.textContent = item.value;
+
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+
+    card.appendChild(titleDiv);
+    card.appendChild(scroll);
+    container.appendChild(card);
+  }
+
   function createRainfallUploadBlock(index) {
     const wrapper = document.createElement('div');
     wrapper.className = 'upload-section';
@@ -1023,6 +1113,67 @@
     addConsoleLine('info', 'Generated ' + count + ' soil upload input(s)');
   }
 
+  function createFormSoilTypeBlock(index) {
+    const card = document.createElement('div');
+    card.className = 'form-soil-card';
+
+    const title = document.createElement('div');
+    title.className = 'form-soil-title';
+    title.textContent = 'Soil type ' + index;
+
+    const grid = document.createElement('div');
+    grid.className = 'form-grid';
+
+    const fields = [
+      { key: 'phi_deg', label: 'phi_deg', value: '40.50' },
+      { key: 'phi_cov', label: 'phi_cov', value: '0.02' },
+      { key: 'c_kpa', label: 'c_kpa', value: '1.72' },
+      { key: 'c_cov', label: 'c_cov', value: '0.69' },
+      { key: 'gamma_s', label: 'gamma_s', value: '16.87' },
+      { key: 'rho_c_phi', label: 'rho_c_phi', value: '-0.5' }
+    ];
+
+    fields.forEach(field => {
+      const wrap = document.createElement('div');
+      wrap.className = 'field-group';
+
+      const label = document.createElement('div');
+      label.className = 'field-label';
+      label.textContent = field.label;
+
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = 'any';
+      input.className = 'number-input';
+      input.value = field.value;
+      input.id = `form_${field.key}_${index}`;
+
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      grid.appendChild(wrap);
+    });
+
+    card.appendChild(title);
+    card.appendChild(grid);
+    return card;
+  }
+
+  function generateFormInputs() {
+    const count = parseInt(formSoilTypeCount.value, 10);
+    formSoilTypeContainer.innerHTML = '';
+
+    if (!Number.isFinite(count) || count < 1) {
+      addConsoleLine('warn', 'FORM soil type count must be at least 1');
+      return;
+    }
+
+    for (let i = 1; i <= count; i++) {
+      formSoilTypeContainer.appendChild(createFormSoilTypeBlock(i));
+    }
+
+    addConsoleLine('info', 'Generated FORM inputs for ' + count + ' soil type(s)');
+  }
+
   panelTabs.forEach(tab => {
     tab.addEventListener('click', function () {
       activatePanel(tab.dataset.panel);
@@ -1034,6 +1185,13 @@
     tab.addEventListener('click', function () {
       activateVizPanel(tab.dataset.viz);
       addConsoleLine('info', 'Switched to visualise tab: ' + tab.dataset.viz);
+    });
+  });
+
+  rightTabs.forEach(tab => {
+    tab.addEventListener('click', function () {
+      activateRightPanel(tab.dataset.rightPanel);
+      addConsoleLine('info', 'Switched to right tab: ' + tab.dataset.rightPanel);
     });
   });
 
@@ -1074,6 +1232,83 @@
     }
   });
 
+  if (geotopConfigInput) {
+    geotopConfigInput.addEventListener('change', async function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      geotopConfigFileName.textContent = file.name;
+      geotopConfigStatus.textContent = 'Reading GeoTOP configuration...';
+      addConsoleLine('info', 'GeoTOP configuration selected: ' + file.name);
+
+      try {
+        const text = await file.text();
+        const rows = parseGeotopConfig(text);
+
+        drawNameValueTable(
+          geotopSummaryArea,
+          rows,
+          file.name,
+          'geotopSummaryTable'
+        );
+
+        geotopConfigStatus.textContent = 'GeoTOP configuration uploaded successfully';
+        activateVizPanel('geotopVizPanel');
+        addConsoleLine('info', 'GeoTOP configuration parsed successfully');
+      } catch (err) {
+        geotopConfigStatus.textContent = 'Failed to parse GeoTOP configuration';
+        addConsoleLine('err', 'GeoTOP configuration error: ' + err.message);
+      }
+    });
+  }
+
+  if (runGeotopBtn) {
+    runGeotopBtn.addEventListener('click', function () {
+      addConsoleLine('info', 'Run simulation button clicked');
+    });
+  }
+
+  if (generateFormInputsBtn) {
+    generateFormInputsBtn.addEventListener('click', generateFormInputs);
+  }
+
+  if (runFormBtn) {
+    runFormBtn.addEventListener('click', function () {
+      addConsoleLine('info', 'Run FORM to calculate PoF button clicked');
+    });
+  }
+
+  if (mlInventoryInput) {
+    mlInventoryInput.addEventListener('change', function (e) {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) {
+        mlInventoryFileList.textContent = 'None';
+        return;
+      }
+
+      mlInventoryFileList.innerHTML = files.map(f => f.name).join('<br>');
+      addConsoleLine('info', files.length + ' landslide inventory file(s) selected');
+    });
+  }
+
+  if (mlTrainingBtn) {
+    mlTrainingBtn.addEventListener('click', function () {
+      addConsoleLine('info', 'Machine Learning: Training button clicked');
+    });
+  }
+
+  if (mlFastPredictionBtn) {
+    mlFastPredictionBtn.addEventListener('click', function () {
+      addConsoleLine('info', 'Machine Learning: Fast Prediction button clicked');
+    });
+  }
+
+  if (mlArPredictionBtn) {
+    mlArPredictionBtn.addEventListener('click', function () {
+      addConsoleLine('info', 'Machine Learning: Augmented-Reality Prediction button clicked');
+    });
+  }
+
   clearConsoleBtn.addEventListener('click', clearConsole);
   fitLayerBtn.addEventListener('click', fitActiveLayer);
 
@@ -1105,6 +1340,7 @@
   initMap();
   generateRainfallInputs();
   generateSoilInputs();
+  generateFormInputs();
   addConsoleLine('info', 'System initialized');
-  addConsoleLine('info', 'Ready. Upload DEM / soil / geo rasters or rainfall / soil files.');
+  addConsoleLine('info', 'Ready. Upload DEM / GeoTOP / FORM / ML inputs.');
 })();
