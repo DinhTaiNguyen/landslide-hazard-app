@@ -22,6 +22,16 @@
                     <div class="brand-subtitle">Multi-layer raster and rainfall dashboard</div>
                 </div>
             </div>
+
+            <div class="topbar-right">
+                <div class="topbar-actions">
+                    <button id="loginBtn" class="icon-btn" type="button" title="Login">👤</button>
+                    <button id="helpBtn" class="icon-btn" type="button" title="Help">❓</button>
+                </div>
+                <div id="currentTimeDisplay" class="current-time-line">
+                    Current Time (Australia/Melbourne): --
+                </div>
+            </div>
         </header>
 
         <aside class="left-panel card">
@@ -378,6 +388,13 @@
             </div>
         </aside>
     </div>
+
+    <footer class="app-footer">
+        <div class="footer-text">
+            Version 0.1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MCG Lab, Monash University, Clayton, Victoria,
+            Australia (Contact: Ha.Bui@monash.edu)
+        </div>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>

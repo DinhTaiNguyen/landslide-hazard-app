@@ -36,6 +36,9 @@
   const zoomInMapBtn = document.getElementById('zoomInMapBtn');
   const zoomOutMapBtn = document.getElementById('zoomOutMapBtn');
   const basemapSelect = document.getElementById('basemapSelect');
+  const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+  const loginBtn = document.getElementById('loginBtn');
+  const helpBtn = document.getElementById('helpBtn');
 
   const crsSelect = document.getElementById('crsSelect');
   const rasterStats = document.getElementById('rasterStats');
@@ -183,6 +186,27 @@
     addConsoleLine('info', 'Console cleared');
   }
 
+  function updateCurrentTime() {
+    if (!currentTimeDisplay) return;
+
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-AU', {
+      timeZone: 'Australia/Melbourne',
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZoneName: 'short'
+    });
+
+    currentTimeDisplay.textContent =
+      'Current Time (Australia/Melbourne): ' + formatter.format(now);
+  }
+
   window.onerror = function (message, source, lineno) {
     addConsoleLine('err', `JS error: ${message} (line ${lineno})`);
   };
@@ -201,8 +225,6 @@
     const cfg = baseLayerConfigs[key];
     currentBaseLayer = L.tileLayer(cfg.url, cfg.options);
     currentBaseLayer.addTo(map);
-
-    addConsoleLine('info', 'Basemap switched to: ' + key);
   }
 
   function initMap() {
@@ -567,7 +589,6 @@
       }
 
       setStatus('Reading ' + file.name + ' ...');
-      addConsoleLine('info', 'File selected for ' + layerLabel + ': ' + file.name);
 
       const ext = file.name.split('.').pop().toLowerCase();
 
@@ -671,11 +692,11 @@
     const scroll = document.createElement('div');
     scroll.className = 'chart-scroll';
 
-    const cardWidth = 920;
+    const containerWidth = Math.max(scroll.clientWidth || container.clientWidth || 600, 420);
     const pointCount = dataset.yValues.length;
-    const baseVisibleWidth = cardWidth - 60;
-    let svgWidth = baseVisibleWidth;
+    const baseVisibleWidth = Math.max(containerWidth - 8, 420);
 
+    let svgWidth = baseVisibleWidth;
     if (pointCount > 80) {
       svgWidth = Math.max(baseVisibleWidth, pointCount * 16);
     }
@@ -1394,6 +1415,18 @@
   if (mlFastPredictionBtn) mlFastPredictionBtn.addEventListener('click', function () { addConsoleLine('info', 'Machine Learning: Fast Prediction button clicked'); });
   if (mlArPredictionBtn) mlArPredictionBtn.addEventListener('click', function () { addConsoleLine('info', 'Machine Learning: Augmented-Reality Prediction button clicked'); });
 
+  if (loginBtn) {
+    loginBtn.addEventListener('click', function () {
+      addConsoleLine('info', 'Login button clicked');
+    });
+  }
+
+  if (helpBtn) {
+    helpBtn.addEventListener('click', function () {
+      addConsoleLine('info', 'Help button clicked');
+    });
+  }
+
   clearConsoleBtn.addEventListener('click', clearConsole);
   fitLayerBtn.addEventListener('click', fitActiveLayer);
   clearLayerBtn.addEventListener('click', function () { clearAllLayers(); setStatus('All layers cleared'); });
@@ -1419,5 +1452,7 @@
   generateFormInputs();
   buildMlHyperparametersGrid();
   generateMlInventoryInputs();
+  updateCurrentTime();
+  setInterval(updateCurrentTime, 1000);
   addConsoleLine('info', 'System initialized');
 })();
