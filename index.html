@@ -14,7 +14,9 @@
     <div class="app">
         <header class="topbar">
             <div class="brand-wrap">
-                <div class="brand-mark"></div>
+                <div class="brand-logo-rotator">
+                    <img src="images/GeoXPM_logo_3D.png" alt="GeoXPM Logo" class="brand-logo-spin" />
+                </div>
                 <div>
                     <div class="brand-title">LandSlide Predictor Pro</div>
                     <div class="brand-subtitle">Multi-layer raster and rainfall dashboard</div>
@@ -32,157 +34,160 @@
                 <button class="panel-tab" type="button" data-panel="geoPanel">Geo</button>
             </div>
 
-            <!-- DEM PANEL -->
-            <div id="demPanel" class="left-subpanel active">
-                <div class="field-group">
-                    <div class="field-label">Coordinate Reference System</div>
-                    <select id="crsSelect" class="field-select">
-                        <option value="auto">Auto detect</option>
-                        <option value="EPSG:4326">EPSG:4326 - WGS84</option>
-                        <option value="EPSG:4490">EPSG:4490 - CGCS2000 geographic</option>
-                        <option value="EPSG:3857">EPSG:3857 - Web Mercator</option>
-                        <option value="EPSG:4549" selected>EPSG:4549 - CGCS2000 / 3-degree Gauss-Kruger CM 120E</option>
-                    </select>
-                </div>
+            <div class="left-panel-scroll">
+                <!-- DEM PANEL -->
+                <div id="demPanel" class="left-subpanel active">
+                    <div class="field-group">
+                        <div class="field-label">Coordinate Reference System</div>
+                        <select id="crsSelect" class="field-select">
+                            <option value="auto">Auto detect</option>
+                            <option value="EPSG:4326">EPSG:4326 - WGS84</option>
+                            <option value="EPSG:4490">EPSG:4490 - CGCS2000 geographic</option>
+                            <option value="EPSG:3857">EPSG:3857 - Web Mercator</option>
+                            <option value="EPSG:4549" selected>EPSG:4549 - CGCS2000 / 3-degree Gauss-Kruger CM 120E
+                            </option>
+                        </select>
+                    </div>
 
-                <div class="upload-section">
-                    <div class="upload-section-title-row">
-                        <span class="upload-section-title">DEM Data</span>
-                        <label class="view-toggle-wrap">
-                            <input id="demViewToggle" type="checkbox" checked disabled />
-                            <span>View</span>
+                    <div class="upload-section">
+                        <div class="upload-section-title-row">
+                            <span class="upload-section-title">DEM Data</span>
+                            <label class="view-toggle-wrap">
+                                <input id="demViewToggle" type="checkbox" checked disabled />
+                                <span>View</span>
+                            </label>
+                        </div>
+                        <input id="demFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                        <label for="demFileInput" class="dropbox">
+                            <div class="dropbox-icon">⤒</div>
+                            <div class="dropbox-title">Upload DEM raster</div>
+                            <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
                         </label>
+                        <div id="demSelectedFile" class="field-box compact-box">None</div>
                     </div>
-                    <input id="demFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="demFileInput" class="dropbox">
-                        <div class="dropbox-icon">⤒</div>
-                        <div class="dropbox-title">Upload DEM raster</div>
-                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
-                    </label>
-                    <div id="demSelectedFile" class="field-box compact-box">None</div>
-                </div>
 
-                <div class="upload-section">
-                    <div class="upload-section-title-row">
-                        <span class="upload-section-title">Slope Map</span>
-                        <label class="view-toggle-wrap">
-                            <input id="slopeViewToggle" type="checkbox" checked disabled />
-                            <span>View</span>
+                    <div class="upload-section">
+                        <div class="upload-section-title-row">
+                            <span class="upload-section-title">Slope Map</span>
+                            <label class="view-toggle-wrap">
+                                <input id="slopeViewToggle" type="checkbox" checked disabled />
+                                <span>View</span>
+                            </label>
+                        </div>
+                        <input id="slopeFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                        <label for="slopeFileInput" class="dropbox">
+                            <div class="dropbox-icon">⤒</div>
+                            <div class="dropbox-title">Upload Slope raster</div>
+                            <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
                         </label>
+                        <div id="slopeSelectedFile" class="field-box compact-box">None</div>
                     </div>
-                    <input id="slopeFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="slopeFileInput" class="dropbox">
-                        <div class="dropbox-icon">⤒</div>
-                        <div class="dropbox-title">Upload Slope raster</div>
-                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
-                    </label>
-                    <div id="slopeSelectedFile" class="field-box compact-box">None</div>
-                </div>
 
-                <div class="upload-section">
-                    <div class="upload-section-title-row">
-                        <span class="upload-section-title">Soil Type Map</span>
-                        <label class="view-toggle-wrap">
-                            <input id="soilTypeViewToggle" type="checkbox" checked disabled />
-                            <span>View</span>
+                    <div class="upload-section">
+                        <div class="upload-section-title-row">
+                            <span class="upload-section-title">Soil Type Map</span>
+                            <label class="view-toggle-wrap">
+                                <input id="soilTypeViewToggle" type="checkbox" checked disabled />
+                                <span>View</span>
+                            </label>
+                        </div>
+                        <input id="soilTypeFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                        <label for="soilTypeFileInput" class="dropbox">
+                            <div class="dropbox-icon">⤒</div>
+                            <div class="dropbox-title">Upload Soil Type raster</div>
+                            <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
                         </label>
+                        <div id="soilTypeSelectedFile" class="field-box compact-box">None</div>
                     </div>
-                    <input id="soilTypeFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="soilTypeFileInput" class="dropbox">
-                        <div class="dropbox-icon">⤒</div>
-                        <div class="dropbox-title">Upload Soil Type raster</div>
-                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
-                    </label>
-                    <div id="soilTypeSelectedFile" class="field-box compact-box">None</div>
-                </div>
 
-                <div class="upload-section">
-                    <div class="upload-section-title-row">
-                        <span class="upload-section-title">Soil Thickness Map</span>
-                        <label class="view-toggle-wrap">
-                            <input id="soilThicknessViewToggle" type="checkbox" checked disabled />
-                            <span>View</span>
+                    <div class="upload-section">
+                        <div class="upload-section-title-row">
+                            <span class="upload-section-title">Soil Thickness Map</span>
+                            <label class="view-toggle-wrap">
+                                <input id="soilThicknessViewToggle" type="checkbox" checked disabled />
+                                <span>View</span>
+                            </label>
+                        </div>
+                        <input id="soilThicknessFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+                        <label for="soilThicknessFileInput" class="dropbox">
+                            <div class="dropbox-icon">⤒</div>
+                            <div class="dropbox-title">Upload Soil Thickness raster</div>
+                            <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
                         </label>
+                        <div id="soilThicknessSelectedFile" class="field-box compact-box">None</div>
                     </div>
-                    <input id="soilThicknessFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
-                    <label for="soilThicknessFileInput" class="dropbox">
-                        <div class="dropbox-icon">⤒</div>
-                        <div class="dropbox-title">Upload Soil Thickness raster</div>
-                        <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
-                    </label>
-                    <div id="soilThicknessSelectedFile" class="field-box compact-box">None</div>
-                </div>
 
-                <div class="field-group">
-                    <div class="field-label">Status</div>
-                    <div id="uploadStatus" class="field-box">Waiting for raster upload...</div>
-                </div>
+                    <div class="field-group">
+                        <div class="field-label">Status</div>
+                        <div id="uploadStatus" class="field-box">Waiting for raster upload...</div>
+                    </div>
 
-                <div class="field-group">
-                    <div class="field-label">Active layer statistics</div>
-                    <div id="rasterStats" class="field-box">No raster loaded</div>
-                </div>
-            </div>
-
-            <!-- RAINFALL PANEL -->
-            <div id="rainfallPanel" class="left-subpanel">
-                <div class="field-group">
-                    <div class="field-label">How many rainfall files?</div>
-                    <div class="inline-controls">
-                        <input id="rainfallCountInput" class="number-input" type="number" min="1" value="1" />
-                        <button id="generateRainfallInputsBtn" class="small-btn" type="button">Generate</button>
+                    <div class="field-group">
+                        <div class="field-label">Active layer statistics</div>
+                        <div id="rasterStats" class="field-box">No raster loaded</div>
                     </div>
                 </div>
 
-                <div class="field-group">
-                    <div class="field-label">Rainfall file instructions</div>
-                    <div class="field-box small-text">
-                        File format assumption:<br>
-                        - 1st row = column names<br>
-                        - Column 1 = X axis<br>
-                        - Column 2 = Y axis<br>
-                        - Data starts from row 2<br><br>
-                        Example: Date, Rainfall Intensity
+                <!-- RAINFALL PANEL -->
+                <div id="rainfallPanel" class="left-subpanel">
+                    <div class="field-group">
+                        <div class="field-label">How many rainfall files?</div>
+                        <div class="inline-controls">
+                            <input id="rainfallCountInput" class="number-input" type="number" min="1" value="1" />
+                            <button id="generateRainfallInputsBtn" class="small-btn" type="button">Generate</button>
+                        </div>
                     </div>
+
+                    <div class="field-group">
+                        <div class="field-label">Rainfall file instructions</div>
+                        <div class="field-box small-text">
+                            File format assumption:<br>
+                            - 1st row = column names<br>
+                            - Column 1 = X axis<br>
+                            - Column 2 = Y axis<br>
+                            - Data starts from row 2<br><br>
+                            Example: Date, Rainfall Intensity
+                        </div>
+                    </div>
+
+                    <div id="rainfallUploadContainer"></div>
                 </div>
 
-                <div id="rainfallUploadContainer"></div>
-            </div>
-
-            <!-- SOIL PANEL -->
-            <div id="soilPanel" class="left-subpanel">
-                <div class="field-group">
-                    <div class="field-label">How many soil files?</div>
-                    <div class="inline-controls">
-                        <input id="soilCountInput" class="number-input" type="number" min="1" value="1" />
-                        <button id="generateSoilInputsBtn" class="small-btn" type="button">Generate</button>
+                <!-- SOIL PANEL -->
+                <div id="soilPanel" class="left-subpanel">
+                    <div class="field-group">
+                        <div class="field-label">How many soil files?</div>
+                        <div class="inline-controls">
+                            <input id="soilCountInput" class="number-input" type="number" min="1" value="1" />
+                            <button id="generateSoilInputsBtn" class="small-btn" type="button">Generate</button>
+                        </div>
                     </div>
+
+                    <div class="field-group">
+                        <div class="field-label">Soil file instructions</div>
+                        <div class="field-box small-text">
+                            File format assumption:<br>
+                            - 1st row = column names<br>
+                            - From 2nd row = value of each soil layer<br>
+                            - CSV, TXT, comma/tab/space separated
+                        </div>
+                    </div>
+
+                    <div id="soilUploadContainer"></div>
                 </div>
 
-                <div class="field-group">
-                    <div class="field-label">Soil file instructions</div>
-                    <div class="field-box small-text">
-                        File format assumption:<br>
-                        - 1st row = column names<br>
-                        - From 2nd row = value of each soil layer<br>
-                        - CSV, TXT, comma/tab/space separated
+                <!-- GEO PANEL -->
+                <div id="geoPanel" class="left-subpanel">
+                    <div class="field-group">
+                        <div class="field-label">How many maps want to add?</div>
+                        <div class="inline-controls">
+                            <input id="geoMapCountInput" class="number-input" type="number" min="1" value="1" />
+                            <button id="generateGeoMapInputsBtn" class="small-btn" type="button">Generate</button>
+                        </div>
                     </div>
+
+                    <div id="geoUploadContainer"></div>
                 </div>
-
-                <div id="soilUploadContainer"></div>
-            </div>
-
-            <!-- GEO PANEL -->
-            <div id="geoPanel" class="left-subpanel">
-                <div class="field-group">
-                    <div class="field-label">How many maps want to add?</div>
-                    <div class="inline-controls">
-                        <input id="geoMapCountInput" class="number-input" type="number" min="1" value="1" />
-                        <button id="generateGeoMapInputsBtn" class="small-btn" type="button">Generate</button>
-                    </div>
-                </div>
-
-                <div id="geoUploadContainer"></div>
             </div>
         </aside>
 
@@ -281,81 +286,85 @@
                 <button class="right-tab" type="button" data-right-panel="mlRightPanel">Machine Learning</button>
             </div>
 
-            <!-- GeoTOP TAB -->
-            <div id="geotopRightPanel" class="right-subpanel active">
-                <div class="config-card">
-                    <div class="config-card-title">GeoTOP Configuration</div>
+            <div class="right-panel-scroll">
+                <!-- GeoTOP TAB -->
+                <div id="geotopRightPanel" class="right-subpanel active">
+                    <div class="config-card">
+                        <div class="config-card-title">GeoTOP Configuration</div>
 
-                    <div class="upload-section">
-                        <input id="geotopConfigInput" type="file" accept=".txt,.cfg,.ini,.asc,.dat" hidden />
-                        <label for="geotopConfigInput" class="dropbox">
-                            <div class="dropbox-icon">⤒</div>
-                            <div class="dropbox-title">Upload GeoTOP configuration</div>
-                            <div class="dropbox-subtitle">TXT, CFG, INI, DAT</div>
-                        </label>
-                        <div id="geotopConfigFileName" class="field-box compact-box">None</div>
-                    </div>
+                        <div class="upload-section">
+                            <input id="geotopConfigInput" type="file" accept=".txt,.cfg,.ini,.asc,.dat" hidden />
+                            <label for="geotopConfigInput" class="dropbox">
+                                <div class="dropbox-icon">⤒</div>
+                                <div class="dropbox-title">Upload GeoTOP configuration</div>
+                                <div class="dropbox-subtitle">TXT, CFG, INI, DAT</div>
+                            </label>
+                            <div id="geotopConfigFileName" class="field-box compact-box">None</div>
+                        </div>
 
-                    <div class="field-group">
-                        <div class="field-label">Status</div>
-                        <div id="geotopConfigStatus" class="field-box">Waiting for GeoTOP configuration...</div>
-                    </div>
+                        <div class="field-group">
+                            <div class="field-label">Status</div>
+                            <div id="geotopConfigStatus" class="field-box">Waiting for GeoTOP configuration...</div>
+                        </div>
 
-                    <div class="button-row">
-                        <button id="runGeotopBtn" class="primary-btn" type="button">Run simulation</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- FORM TAB -->
-            <div id="formRightPanel" class="right-subpanel">
-                <div class="config-card">
-                    <div class="config-card-title">FORM Parameters</div>
-
-                    <div class="field-group">
-                        <div class="field-label">How many soil types?</div>
-                        <div class="inline-controls">
-                            <input id="formSoilTypeCount" class="number-input" type="number" min="1" value="1" />
-                            <button id="generateFormInputsBtn" class="small-btn" type="button">Generate</button>
+                        <div class="button-row">
+                            <button id="runGeotopBtn" class="primary-btn" type="button">Run simulation</button>
                         </div>
                     </div>
-
-                    <div id="formSoilTypeContainer"></div>
-
-                    <div class="button-row">
-                        <button id="runFormBtn" class="primary-btn" type="button">Run FORM to calculate PoF</button>
-                    </div>
                 </div>
-            </div>
 
-            <!-- ML TAB -->
-            <div id="mlRightPanel" class="right-subpanel">
-                <div class="config-card">
-                    <div class="config-card-title">Machine Learning</div>
+                <!-- FORM TAB -->
+                <div id="formRightPanel" class="right-subpanel">
+                    <div class="config-card">
+                        <div class="config-card-title">FORM Parameters</div>
 
-                    <div class="field-group">
-                        <div class="field-label">Hyperparameters</div>
-                        <div id="mlHyperparametersGrid" class="form-grid ml-grid"></div>
-                    </div>
+                        <div class="field-group">
+                            <div class="field-label">How many soil types?</div>
+                            <div class="inline-controls">
+                                <input id="formSoilTypeCount" class="number-input" type="number" min="1" value="1" />
+                                <button id="generateFormInputsBtn" class="small-btn" type="button">Generate</button>
+                            </div>
+                        </div>
 
-                    <div class="button-column">
-                        <button id="mlTrainingBtn" class="primary-btn" type="button">Training</button>
-                        <button id="mlFastPredictionBtn" class="primary-btn" type="button">Fast Prediction</button>
-                    </div>
+                        <div id="formSoilTypeContainer"></div>
 
-                    <div class="field-group">
-                        <div class="field-label">How many landslide inventories?</div>
-                        <div class="inline-controls">
-                            <input id="mlInventoryCountInput" class="number-input" type="number" min="1" value="1" />
-                            <button id="generateMlInventoryInputsBtn" class="small-btn" type="button">Generate</button>
+                        <div class="button-row">
+                            <button id="runFormBtn" class="primary-btn" type="button">Run FORM to calculate PoF</button>
                         </div>
                     </div>
+                </div>
 
-                    <div id="mlInventoryUploadContainer"></div>
+                <!-- ML TAB -->
+                <div id="mlRightPanel" class="right-subpanel">
+                    <div class="config-card">
+                        <div class="config-card-title">Machine Learning</div>
 
-                    <div class="button-column">
-                        <button id="mlArPredictionBtn" class="primary-btn" type="button">Augmented-Reality
-                            Prediction</button>
+                        <div class="field-group">
+                            <div class="field-label">Hyperparameters</div>
+                            <div id="mlHyperparametersGrid" class="form-grid ml-grid"></div>
+                        </div>
+
+                        <div class="button-column">
+                            <button id="mlTrainingBtn" class="primary-btn" type="button">Training</button>
+                            <button id="mlFastPredictionBtn" class="primary-btn" type="button">Fast Prediction</button>
+                        </div>
+
+                        <div class="field-group">
+                            <div class="field-label">How many landslide inventories?</div>
+                            <div class="inline-controls">
+                                <input id="mlInventoryCountInput" class="number-input" type="number" min="1"
+                                    value="1" />
+                                <button id="generateMlInventoryInputsBtn" class="small-btn"
+                                    type="button">Generate</button>
+                            </div>
+                        </div>
+
+                        <div id="mlInventoryUploadContainer"></div>
+
+                        <div class="button-column">
+                            <button id="mlArPredictionBtn" class="primary-btn" type="button">Augmented-Reality
+                                Prediction</button>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -477,11 +477,7 @@
     bounds = ascBoundsToLatLngBounds(asc, selectedCRS);
 
     if (selectedCRS === 'auto') {
-      if (ascLooksGeographic(asc)) {
-        crsText = 'Auto → EPSG:4326 geographic';
-      } else {
-        crsText = 'Auto → unsupported projected CRS';
-      }
+      crsText = ascLooksGeographic(asc) ? 'Auto → EPSG:4326 geographic' : 'Auto → unsupported projected CRS';
     } else {
       crsText = selectedCRS;
     }
@@ -959,7 +955,6 @@
       if (!file) return;
 
       fileInfo.textContent = file.name;
-      addConsoleLine('info', 'Rainfall file selected: ' + file.name);
 
       try {
         const text = await file.text();
@@ -1018,7 +1013,6 @@
       if (!file) return;
 
       fileInfo.textContent = file.name;
-      addConsoleLine('info', 'Soil file selected: ' + file.name);
 
       try {
         const text = await file.text();
@@ -1121,44 +1115,25 @@
     const count = parseInt(geoMapCountInput.value, 10);
     geoUploadContainer.innerHTML = '';
 
-    if (!Number.isFinite(count) || count < 1) {
-      addConsoleLine('warn', 'Geo map count must be at least 1');
-      return;
-    }
+    if (!Number.isFinite(count) || count < 1) return;
 
     for (let i = 1; i <= count; i++) {
       geoUploadContainer.appendChild(createGeoMapUploadBlock(i));
     }
-
-    addConsoleLine('info', 'Generated ' + count + ' geo map upload input(s)');
   }
 
   function generateRainfallInputs() {
     const count = parseInt(rainfallCountInput.value, 10);
     rainfallUploadContainer.innerHTML = '';
-
-    if (!Number.isFinite(count) || count < 1) {
-      addConsoleLine('warn', 'Rainfall file count must be at least 1');
-      return;
-    }
-
-    for (let i = 1; i <= count; i++) {
-      rainfallUploadContainer.appendChild(createRainfallUploadBlock(i));
-    }
+    if (!Number.isFinite(count) || count < 1) return;
+    for (let i = 1; i <= count; i++) rainfallUploadContainer.appendChild(createRainfallUploadBlock(i));
   }
 
   function generateSoilInputs() {
     const count = parseInt(soilCountInput.value, 10);
     soilUploadContainer.innerHTML = '';
-
-    if (!Number.isFinite(count) || count < 1) {
-      addConsoleLine('warn', 'Soil file count must be at least 1');
-      return;
-    }
-
-    for (let i = 1; i <= count; i++) {
-      soilUploadContainer.appendChild(createSoilUploadBlock(i));
-    }
+    if (!Number.isFinite(count) || count < 1) return;
+    for (let i = 1; i <= count; i++) soilUploadContainer.appendChild(createSoilUploadBlock(i));
   }
 
   function createFormSoilTypeBlock(index) {
@@ -1209,15 +1184,8 @@
   function generateFormInputs() {
     const count = parseInt(formSoilTypeCount.value, 10);
     formSoilTypeContainer.innerHTML = '';
-
-    if (!Number.isFinite(count) || count < 1) {
-      addConsoleLine('warn', 'FORM soil type count must be at least 1');
-      return;
-    }
-
-    for (let i = 1; i <= count; i++) {
-      formSoilTypeContainer.appendChild(createFormSoilTypeBlock(i));
-    }
+    if (!Number.isFinite(count) || count < 1) return;
+    for (let i = 1; i <= count; i++) formSoilTypeContainer.appendChild(createFormSoilTypeBlock(i));
   }
 
   function buildMlHyperparametersGrid() {
@@ -1312,7 +1280,6 @@
 
       fileInfo.textContent = file.name;
       handleRasterFile(file, layerKey, 'Landslide Inventory ' + index + ' (' + dateInput.value + ')', viewToggle);
-      addConsoleLine('info', 'ML inventory date: ' + dateInput.value);
     });
 
     viewToggle.addEventListener('change', function () {
@@ -1341,17 +1308,8 @@
   function generateMlInventoryInputs() {
     const count = parseInt(mlInventoryCountInput.value, 10);
     mlInventoryUploadContainer.innerHTML = '';
-
-    if (!Number.isFinite(count) || count < 1) {
-      addConsoleLine('warn', 'Landslide inventory count must be at least 1');
-      return;
-    }
-
-    for (let i = 1; i <= count; i++) {
-      mlInventoryUploadContainer.appendChild(createMlInventoryBlock(i));
-    }
-
-    addConsoleLine('info', 'Generated ' + count + ' ML inventory upload input(s)');
+    if (!Number.isFinite(count) || count < 1) return;
+    for (let i = 1; i <= count; i++) mlInventoryUploadContainer.appendChild(createMlInventoryBlock(i));
   }
 
   panelTabs.forEach(tab => {
@@ -1422,7 +1380,6 @@
 
         geotopConfigStatus.textContent = 'GeoTOP configuration uploaded successfully';
         activateVizPanel('geotopVizPanel');
-        addConsoleLine('info', 'GeoTOP configuration parsed successfully');
       } catch (err) {
         geotopConfigStatus.textContent = 'Failed to parse GeoTOP configuration';
         addConsoleLine('err', 'GeoTOP configuration error: ' + err.message);
@@ -1430,49 +1387,16 @@
     });
   }
 
-  if (runGeotopBtn) {
-    runGeotopBtn.addEventListener('click', function () {
-      addConsoleLine('info', 'Run simulation button clicked');
-    });
-  }
-
-  if (generateFormInputsBtn) {
-    generateFormInputsBtn.addEventListener('click', generateFormInputs);
-  }
-
-  if (runFormBtn) {
-    runFormBtn.addEventListener('click', function () {
-      addConsoleLine('info', 'Run FORM to calculate PoF button clicked');
-    });
-  }
-
-  if (mlTrainingBtn) {
-    mlTrainingBtn.addEventListener('click', function () {
-      addConsoleLine('info', 'Machine Learning: Training button clicked');
-    });
-  }
-
-  if (mlFastPredictionBtn) {
-    mlFastPredictionBtn.addEventListener('click', function () {
-      addConsoleLine('info', 'Machine Learning: Fast Prediction button clicked');
-    });
-  }
-
-  if (mlArPredictionBtn) {
-    mlArPredictionBtn.addEventListener('click', function () {
-      addConsoleLine('info', 'Machine Learning: Augmented-Reality Prediction button clicked');
-    });
-  }
+  if (runGeotopBtn) runGeotopBtn.addEventListener('click', function () { addConsoleLine('info', 'Run simulation button clicked'); });
+  if (generateFormInputsBtn) generateFormInputsBtn.addEventListener('click', generateFormInputs);
+  if (runFormBtn) runFormBtn.addEventListener('click', function () { addConsoleLine('info', 'Run FORM to calculate PoF button clicked'); });
+  if (mlTrainingBtn) mlTrainingBtn.addEventListener('click', function () { addConsoleLine('info', 'Machine Learning: Training button clicked'); });
+  if (mlFastPredictionBtn) mlFastPredictionBtn.addEventListener('click', function () { addConsoleLine('info', 'Machine Learning: Fast Prediction button clicked'); });
+  if (mlArPredictionBtn) mlArPredictionBtn.addEventListener('click', function () { addConsoleLine('info', 'Machine Learning: Augmented-Reality Prediction button clicked'); });
 
   clearConsoleBtn.addEventListener('click', clearConsole);
   fitLayerBtn.addEventListener('click', fitActiveLayer);
-
-  clearLayerBtn.addEventListener('click', function () {
-    clearAllLayers();
-    setStatus('All layers cleared');
-    addConsoleLine('warn', 'All raster layers cleared');
-  });
-
+  clearLayerBtn.addEventListener('click', function () { clearAllLayers(); setStatus('All layers cleared'); });
   resetViewBtn.addEventListener('click', resetMapView);
   zoomInMapBtn.addEventListener('click', function () { if (map) map.zoomIn(); });
   zoomOutMapBtn.addEventListener('click', function () { if (map) map.zoomOut(); });
@@ -1488,12 +1412,6 @@
   generateGeoMapInputsBtn.addEventListener('click', generateGeoMapInputs);
   generateMlInventoryInputsBtn.addEventListener('click', generateMlInventoryInputs);
 
-  if (typeof proj4 === 'undefined') {
-    addConsoleLine('err', 'proj4 library did not load');
-  } else {
-    addConsoleLine('info', 'proj4 library loaded');
-  }
-
   initMap();
   generateRainfallInputs();
   generateSoilInputs();
@@ -1502,5 +1420,4 @@
   buildMlHyperparametersGrid();
   generateMlInventoryInputs();
   addConsoleLine('info', 'System initialized');
-  addConsoleLine('info', 'Ready. Upload DEM / GeoTOP / FORM / ML inputs.');
 })();

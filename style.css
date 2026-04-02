@@ -60,14 +60,36 @@ body {
 .brand-wrap {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
 }
 
-.brand-mark {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    background: linear-gradient(135deg, #f29d41, #d14624);
+.brand-logo-rotator {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 800px;
+}
+
+.brand-logo-spin {
+    width: 42px;
+    height: 42px;
+    object-fit: contain;
+    animation: geoxpmSpin 6s linear infinite;
+    transform-style: preserve-3d;
+    filter: drop-shadow(0 4px 10px rgba(63, 156, 255, 0.35));
+}
+
+@keyframes geoxpmSpin {
+    0% {
+        transform: rotateY(0deg) rotateX(8deg);
+    }
+
+    100% {
+        transform: rotateY(360deg) rotateX(8deg);
+    }
 }
 
 .brand-title {
@@ -98,6 +120,7 @@ body {
     padding: 14px;
 }
 
+.left-panel,
 .center-panel,
 .right-panel {
     display: flex;
@@ -117,6 +140,7 @@ body {
     grid-template-columns: repeat(4, 1fr);
     gap: 6px;
     margin-bottom: 14px;
+    flex: 0 0 auto;
 }
 
 .panel-tab,
@@ -137,6 +161,15 @@ body {
 .right-tab.active {
     background: rgba(60, 145, 255, .14);
     color: #63aeff;
+}
+
+.left-panel-scroll,
+.right-panel-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
 }
 
 .left-subpanel,
@@ -560,7 +593,7 @@ body {
 .console-block {
     margin-top: 16px;
     min-height: 0;
-    flex: 1 1 auto;
+    flex: 0 0 220px;
 }
 
 .console-header {
@@ -573,7 +606,7 @@ body {
 
 .console-content {
     height: calc(100% - 42px);
-    min-height: 220px;
+    min-height: 160px;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, .08);
     background: #0a1017;
@@ -677,6 +710,11 @@ body {
 
     .center-panel {
         min-height: 980px;
+    }
+
+    .left-panel,
+    .right-panel {
+        min-height: 680px;
     }
 
     .map-wrap {
