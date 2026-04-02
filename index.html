@@ -18,8 +18,8 @@
                     <img src="images/GeoXPM_logo_3D.png" alt="GeoXPM Logo" class="brand-logo-spin" />
                 </div>
                 <div>
-                    <div class="brand-title">LandSlide Predictor Pro</div>
-                    <div class="brand-subtitle">Multi-layer raster and rainfall dashboard</div>
+                    <div class="brand-title">MCG Landslide Hazard Mapping Predictor Pro</div>
+                    <div class="brand-subtitle">A reality-augmented, physics-informed framework for spatio-temporal prediction of rainfall-induced shallow landslides</div>
                 </div>
             </div>
 
@@ -38,10 +38,10 @@
             <div class="card-title">Data Input</div>
 
             <div class="panel-tabs">
-                <button class="panel-tab active" type="button" data-panel="demPanel">DEM Data</button>
-                <button class="panel-tab" type="button" data-panel="rainfallPanel">Rainfall</button>
-                <button class="panel-tab" type="button" data-panel="soilPanel">Soil</button>
-                <button class="panel-tab" type="button" data-panel="geoPanel">Geo</button>
+                <button class="panel-tab active" type="button" data-panel="demPanel">Raster Maps</button>
+                <button class="panel-tab" type="button" data-panel="rainfallPanel">Rainfall Data</button>
+                <button class="panel-tab" type="button" data-panel="soilPanel">Soil Layer Properties</button>
+                <button class="panel-tab" type="button" data-panel="geoPanel">Other Maps</button>
             </div>
 
             <div class="left-panel-scroll">
@@ -61,7 +61,7 @@
 
                     <div class="upload-section">
                         <div class="upload-section-title-row">
-                            <span class="upload-section-title">DEM Data</span>
+                            <span class="upload-section-title">Elevation Map</span>
                             <label class="view-toggle-wrap">
                                 <input id="demViewToggle" type="checkbox" checked disabled />
                                 <span>View</span>
@@ -202,7 +202,7 @@
         </aside>
 
         <main class="center-panel card">
-            <div class="card-title">Landslide Hazard Prediction Map</div>
+            <div class="card-title">Analyse Map</div>
 
             <div class="map-wrap">
                 <div id="map"></div>
@@ -255,7 +255,7 @@
                     <button class="viz-tab active" type="button" data-viz="rainfallVizPanel">Rainfall input
                         visualise</button>
                     <button class="viz-tab" type="button" data-viz="soilVizPanel">Soil input visualise</button>
-                    <button class="viz-tab" type="button" data-viz="geotopVizPanel">GeoTOP input</button>
+                    <button class="viz-tab" type="button" data-viz="geotopVizPanel">GeoTOP input visualise</button>
                 </div>
 
                 <div id="rainfallVizPanel" class="viz-panel active">
@@ -278,7 +278,7 @@
 
                 <div id="geotopVizPanel" class="viz-panel">
                     <div class="mini-card viz-card">
-                        <div class="mini-card-title">GeoTOP input</div>
+                        <div class="mini-card-title">GeoTOP input Table</div>
                         <div id="geotopSummaryArea" class="soil-table-area viz-scroll-area">
                             <div class="empty-plot-note">No GeoTOP configuration uploaded yet</div>
                         </div>

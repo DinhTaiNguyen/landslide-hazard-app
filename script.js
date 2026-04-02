@@ -1,7 +1,7 @@
 (function () {
   const rasterConfigs = {
     dem: {
-      label: 'DEM Data',
+      label: 'Elevation Map',
       input: document.getElementById('demFileInput'),
       selectedFile: document.getElementById('demSelectedFile'),
       viewToggle: document.getElementById('demViewToggle')
@@ -236,7 +236,7 @@
     map = L.map('map', {
       center: defaultMapView.center,
       zoom: defaultMapView.zoom,
-      zoomControl: true
+      zoomControl: false
     });
 
     setBaseLayer('osm');
@@ -1458,7 +1458,7 @@
   rightTabs.forEach(tab => {
     tab.addEventListener('click', playTabSound);
   });
-    
+
   initMap();
   generateRainfallInputs();
   generateSoilInputs();

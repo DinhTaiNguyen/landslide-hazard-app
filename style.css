@@ -357,25 +357,25 @@ body {
 .map-overlay-controls {
     position: absolute;
     top: 14px;
-    left: 60px;
-    right: 18px;
+    right: auto;
+    left: 12px;
     z-index: 700;
-    display: flex;
-    justify-content: space-between;
+    display: inline-flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
+    gap: 10px;
+    padding: 8px 12px;
     border-radius: 12px;
     background: rgba(15, 22, 34, .72);
     border: 1px solid rgba(255, 255, 255, .08);
     backdrop-filter: blur(6px);
+    width: auto;    
 }
 
 .map-overlay-left,
 .map-overlay-right {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
@@ -393,8 +393,8 @@ body {
 }
 
 .map-select {
-    min-width: 190px;
-    height: 36px;
+    min-width: 100px;
+    height: 30px;
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, .08);
     background: #162131;
@@ -453,7 +453,7 @@ body {
     right: 18px;
     bottom: 18px;
     z-index: 700;
-    width: 180px;
+    width: 120px;
     padding: 12px;
     border-radius: 12px;
     background: rgba(15, 22, 34, .80);
