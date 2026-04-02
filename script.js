@@ -692,13 +692,15 @@
     const scroll = document.createElement('div');
     scroll.className = 'chart-scroll';
 
-    const containerWidth = Math.max(scroll.clientWidth || container.clientWidth || 600, 420);
+    const containerWidth = Math.max(container.clientWidth || 600, 420);
     const pointCount = dataset.yValues.length;
-    const baseVisibleWidth = Math.max(containerWidth - 8, 420);
+    const baseVisibleWidth = Math.max(containerWidth - 24, 420);
 
     let svgWidth = baseVisibleWidth;
-    if (pointCount > 80) {
-      svgWidth = Math.max(baseVisibleWidth, pointCount * 16);
+
+    /* wider chart only when needed so local scroll appears as backup */
+    if (pointCount > 20) {
+      svgWidth = Math.max(baseVisibleWidth, pointCount * 40);
     }
 
     const svgHeight = 250;
@@ -1445,6 +1447,18 @@
   generateGeoMapInputsBtn.addEventListener('click', generateGeoMapInputs);
   generateMlInventoryInputsBtn.addEventListener('click', generateMlInventoryInputs);
 
+  panelTabs.forEach(tab => {
+    tab.addEventListener('click', playTabSound);
+  });
+
+  vizTabs.forEach(tab => {
+    tab.addEventListener('click', playTabSound);
+  });
+
+  rightTabs.forEach(tab => {
+    tab.addEventListener('click', playTabSound);
+  });
+    
   initMap();
   generateRainfallInputs();
   generateSoilInputs();
@@ -1453,6 +1467,48 @@
   buildMlHyperparametersGrid();
   generateMlInventoryInputs();
   updateCurrentTime();
-  setInterval(updateCurrentTime, 1000);
+  setInterval(updateCurrentTime, 1000);  
   addConsoleLine('info', 'System initialized');
+  let tabAudioCtx = null;
+
+  function getTabAudioContext() {
+    if (!tabAudioCtx) {
+      tabAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return tabAudioCtx;
+  }
+
+  function playTabSound() {
+    try {
+      const ctx = getTabAudioContext();
+
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(720, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(520, ctx.currentTime + 0.08);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1400, ctx.currentTime);
+
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.11);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.12);
+    } catch (err) {
+      console.warn('Tab sound failed:', err);
+    }
+  }  
 })();
