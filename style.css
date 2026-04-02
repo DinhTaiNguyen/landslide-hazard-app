@@ -478,8 +478,7 @@ body {
 .colorbar-gradient {
     width: 22px;
     height: 180px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 0px;   
     background: linear-gradient(to top, #0000ff 0%, #00ffff 25%, #ffff66 60%, #ff9900 80%, #ff0000 100%);
 }
 
