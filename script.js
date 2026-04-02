@@ -23,24 +23,6 @@
       input: document.getElementById('soilThicknessFileInput'),
       selectedFile: document.getElementById('soilThicknessSelectedFile'),
       viewToggle: document.getElementById('soilThicknessViewToggle')
-    },
-    landUse: {
-      label: 'Land Use Map',
-      input: document.getElementById('landUseFileInput'),
-      selectedFile: document.getElementById('landUseSelectedFile'),
-      viewToggle: document.getElementById('landUseViewToggle')
-    },
-    vegetation: {
-      label: 'Vegetation Map',
-      input: document.getElementById('vegetationFileInput'),
-      selectedFile: document.getElementById('vegetationSelectedFile'),
-      viewToggle: document.getElementById('vegetationViewToggle')
-    },
-    lithology: {
-      label: 'Lithology Map',
-      input: document.getElementById('lithologyFileInput'),
-      selectedFile: document.getElementById('lithologySelectedFile'),
-      viewToggle: document.getElementById('lithologyViewToggle')
     }
   };
 
@@ -72,6 +54,10 @@
   const soilUploadContainer = document.getElementById('soilUploadContainer');
   const soilTableArea = document.getElementById('soilTableArea');
 
+  const geoMapCountInput = document.getElementById('geoMapCountInput');
+  const generateGeoMapInputsBtn = document.getElementById('generateGeoMapInputsBtn');
+  const geoUploadContainer = document.getElementById('geoUploadContainer');
+
   const geotopConfigInput = document.getElementById('geotopConfigInput');
   const geotopConfigFileName = document.getElementById('geotopConfigFileName');
   const geotopConfigStatus = document.getElementById('geotopConfigStatus');
@@ -83,9 +69,10 @@
   const formSoilTypeContainer = document.getElementById('formSoilTypeContainer');
   const runFormBtn = document.getElementById('runFormBtn');
 
-  const mlHyperparameters = document.getElementById('mlHyperparameters');
-  const mlInventoryInput = document.getElementById('mlInventoryInput');
-  const mlInventoryFileList = document.getElementById('mlInventoryFileList');
+  const mlHyperparametersGrid = document.getElementById('mlHyperparametersGrid');
+  const mlInventoryCountInput = document.getElementById('mlInventoryCountInput');
+  const generateMlInventoryInputsBtn = document.getElementById('generateMlInventoryInputsBtn');
+  const mlInventoryUploadContainer = document.getElementById('mlInventoryUploadContainer');
   const mlTrainingBtn = document.getElementById('mlTrainingBtn');
   const mlFastPredictionBtn = document.getElementById('mlFastPredictionBtn');
   const mlArPredictionBtn = document.getElementById('mlArPredictionBtn');
@@ -103,6 +90,7 @@
   let rasterLayers = {};
   let activeLayerKey = null;
   let currentBaseLayer = null;
+  let dynamicLayerCounter = 0;
 
   const defaultMapView = {
     center: [29.72, 119.96],
@@ -127,6 +115,23 @@
       options: { attribution: 'Tiles © Esri' }
     }
   };
+
+  const mlHyperparametersDefaults = [
+    ['BATCH_SIZE_STAGE1', '8192'],
+    ['BATCH_SIZE_STAGE2', '4096'],
+    ['EPOCHS_STAGE1', '80'],
+    ['EPOCHS_STAGE2', '100'],
+    ['LR_STAGE1', '1e-3'],
+    ['LR_STAGE2', '1e-3'],
+    ['WEIGHT_DECAY', '1e-5'],
+    ['PATIENCE_STAGE1', '10'],
+    ['PATIENCE_STAGE2', '15'],
+    ['MIN_DELTA', '1e-5'],
+    ['STAGE2_TRAIN_FRAC', '0.60'],
+    ['STAGE2_VAL_FRAC', '0.20'],
+    ['STAGE2_TEST_FRAC', '0.20'],
+    ['CLASS_THRESHOLD', '0.5']
+  ];
 
   if (typeof proj4 !== 'undefined') {
     proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs +type=crs');
@@ -260,7 +265,6 @@
   }
 
   function parseAsc(text) {
-    addConsoleLine('info', 'Parsing ASC file');
     const lines = text.replace(/\r/g, '').trim().split('\n');
     const header = {};
     let dataStart = 0;
@@ -315,8 +319,6 @@
         if (val > max) max = val;
       }
     }
-
-    addConsoleLine('info', `ASC parsed: ${ncols} x ${nrows}`);
 
     return {
       width: ncols,
@@ -398,8 +400,6 @@
     const xMax = asc.xll + asc.width * asc.cellsize;
     const yMax = asc.yll + asc.height * asc.cellsize;
 
-    addConsoleLine('info', 'ASC raw bounds: xMin=' + xMin + ', yMin=' + yMin + ', xMax=' + xMax + ', yMax=' + yMax);
-
     if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) {
       return [[yMin, xMin], [yMax, xMax]];
     }
@@ -407,10 +407,6 @@
     if (selectedCRS === 'EPSG:3857' || selectedCRS === 'EPSG:4549') {
       const ll = transformPointToWGS84(xMin, yMin, selectedCRS);
       const ur = transformPointToWGS84(xMax, yMax, selectedCRS);
-
-      addConsoleLine('info', 'Transformed lower-left: lon=' + ll[0] + ', lat=' + ll[1]);
-      addConsoleLine('info', 'Transformed upper-right: lon=' + ur[0] + ', lat=' + ur[1]);
-
       return [[ll[1], ll[0]], [ur[1], ur[0]]];
     }
 
@@ -438,9 +434,7 @@
     mapEmptyNote.style.display = 'none';
   }
 
-  function registerRasterLayer(layerKey, layerLabel, fileName, leafletLayer, bounds, stats) {
-    const cfg = rasterConfigs[layerKey];
-
+  function registerRasterLayer(layerKey, layerLabel, fileName, leafletLayer, bounds, stats, viewToggleEl) {
     if (rasterLayers[layerKey] && rasterLayers[layerKey].layer && map.hasLayer(rasterLayers[layerKey].layer)) {
       map.removeLayer(rasterLayers[layerKey].layer);
     }
@@ -456,19 +450,23 @@
       max: stats.max,
       width: stats.width,
       height: stats.height,
-      crsText: stats.crsText
+      crsText: stats.crsText,
+      viewToggleEl: viewToggleEl || null
     };
 
-    if (cfg.viewToggle) {
-      cfg.viewToggle.disabled = false;
-      cfg.viewToggle.checked = true;
+    if (viewToggleEl) {
+      viewToggleEl.disabled = false;
+      viewToggleEl.checked = true;
+    } else if (rasterConfigs[layerKey] && rasterConfigs[layerKey].viewToggle) {
+      rasterConfigs[layerKey].viewToggle.disabled = false;
+      rasterConfigs[layerKey].viewToggle.checked = true;
     }
 
     activeLayerKey = layerKey;
     updateActiveFromVisibleLayers();
   }
 
-  function addAscLayer(asc, fileName, layerKey, layerLabel) {
+  function addAscLayer(asc, fileName, layerKey, layerLabel, viewToggleEl) {
     const canvas = renderGridToCanvas(asc.width, asc.height, asc.grid, asc.min, asc.max);
     const url = canvas.toDataURL('image/png');
 
@@ -476,25 +474,16 @@
     let crsText = 'Auto detect';
     const selectedCRS = crsSelect ? crsSelect.value : 'auto';
 
-    try {
-      bounds = ascBoundsToLatLngBounds(asc, selectedCRS);
+    bounds = ascBoundsToLatLngBounds(asc, selectedCRS);
 
-      if (selectedCRS === 'auto') {
-        if (ascLooksGeographic(asc)) {
-          crsText = 'Auto → EPSG:4326 geographic';
-          addConsoleLine('info', 'ASC auto-detected as geographic');
-        } else {
-          crsText = 'Auto → unsupported projected CRS';
-          addConsoleLine('warn', 'Auto detect could not identify projected CRS. Choose one manually.');
-        }
+    if (selectedCRS === 'auto') {
+      if (ascLooksGeographic(asc)) {
+        crsText = 'Auto → EPSG:4326 geographic';
       } else {
-        crsText = selectedCRS;
-        addConsoleLine('info', 'ASC displayed using selected CRS: ' + selectedCRS);
+        crsText = 'Auto → unsupported projected CRS';
       }
-    } catch (err) {
-      addConsoleLine('err', 'CRS transform failed: ' + err.message);
-      setStatus('CRS transform failed');
-      throw err;
+    } else {
+      crsText = selectedCRS;
     }
 
     const leafletLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
@@ -509,17 +498,15 @@
       width: asc.width,
       height: asc.height,
       crsText
-    });
+    }, viewToggleEl);
 
     addConsoleLine('info', layerLabel + ' displayed successfully');
   }
 
-  async function addTiffLayer(file, layerKey, layerLabel) {
+  async function addTiffLayer(file, layerKey, layerLabel, viewToggleEl) {
     if (typeof GeoTIFF === 'undefined') {
       throw new Error('GeoTIFF library not loaded');
     }
-
-    addConsoleLine('info', 'Reading TIFF array buffer');
 
     const buffer = await file.arrayBuffer();
     const tiff = await GeoTIFF.fromArrayBuffer(buffer);
@@ -546,7 +533,6 @@
 
     try {
       const bbox = image.getBoundingBox();
-
       if (
         bbox && bbox.length === 4 &&
         bbox[0] >= -180 && bbox[0] <= 180 &&
@@ -556,13 +542,8 @@
       ) {
         bounds = [[bbox[1], bbox[0]], [bbox[3], bbox[2]]];
         crsText = 'Geographic TIFF bbox';
-        addConsoleLine('info', 'TIFF geographic bounding box detected');
-      } else {
-        addConsoleLine('warn', 'TIFF bbox not geographic; using fallback bounds');
       }
-    } catch (err) {
-      addConsoleLine('warn', 'TIFF bbox unavailable; using fallback bounds');
-    }
+    } catch (err) {}
 
     const leafletLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(map);
 
@@ -576,19 +557,19 @@
       width,
       height,
       crsText
-    });
+    }, viewToggleEl);
 
     addConsoleLine('info', layerLabel + ' displayed successfully');
   }
 
-  async function handleRasterFile(file, layerKey, layerLabel) {
+  async function handleRasterFile(file, layerKey, layerLabel, viewToggleEl) {
     try {
-      if (!file) {
-        addConsoleLine('err', 'No file received');
-        return;
+      if (!file) return;
+
+      if (rasterConfigs[layerKey] && rasterConfigs[layerKey].selectedFile) {
+        rasterConfigs[layerKey].selectedFile.textContent = file.name;
       }
 
-      rasterConfigs[layerKey].selectedFile.textContent = file.name;
       setStatus('Reading ' + file.name + ' ...');
       addConsoleLine('info', 'File selected for ' + layerLabel + ': ' + file.name);
 
@@ -596,11 +577,10 @@
 
       if (ext === 'asc') {
         const text = await file.text();
-        addConsoleLine('info', 'ASC text loaded. Length=' + text.length);
         const asc = parseAsc(text);
-        addAscLayer(asc, file.name, layerKey, layerLabel);
+        addAscLayer(asc, file.name, layerKey, layerLabel, viewToggleEl);
       } else if (ext === 'tif' || ext === 'tiff') {
-        await addTiffLayer(file, layerKey, layerLabel);
+        await addTiffLayer(file, layerKey, layerLabel, viewToggleEl);
       } else {
         throw new Error('Unsupported file type: ' + ext);
       }
@@ -759,13 +739,7 @@
     axisY.setAttribute('stroke', 'rgba(255,255,255,0.25)');
     svg.appendChild(axisY);
 
-    const labelStep = pointCount <= 12
-      ? 1
-      : pointCount <= 30
-        ? 2
-        : pointCount <= 60
-          ? Math.ceil(pointCount / 12)
-          : Math.ceil(pointCount / 14);
+    const labelStep = pointCount <= 12 ? 1 : pointCount <= 30 ? 2 : pointCount <= 60 ? Math.ceil(pointCount / 12) : Math.ceil(pointCount / 14);
 
     dataset.yValues.forEach((val, i) => {
       const centerX = padL + i * stepX + stepX / 2;
@@ -888,17 +862,12 @@
     const results = [];
 
     lines.forEach(line => {
-      let trimmed = line.trim();
-      if (!trimmed) return;
-      if (trimmed.startsWith('!')) return;
-      if (!trimmed.includes('=')) return;
-
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('!') || !trimmed.includes('=')) return;
       const parts = trimmed.split('=');
       const key = parts[0].trim();
       const value = parts.slice(1).join('=').trim();
-
-      if (!key) return;
-      results.push({ name: key, value: value });
+      if (key) results.push({ name: key, value: value });
     });
 
     return results;
@@ -927,14 +896,11 @@
 
     const thead = document.createElement('thead');
     const trHead = document.createElement('tr');
-
-    const th1 = document.createElement('th');
-    th1.textContent = 'Name';
-    const th2 = document.createElement('th');
-    th2.textContent = 'Value';
-
-    trHead.appendChild(th1);
-    trHead.appendChild(th2);
+    ['Name', 'Value'].forEach(txt => {
+      const th = document.createElement('th');
+      th.textContent = txt;
+      trHead.appendChild(th);
+    });
     thead.appendChild(trHead);
 
     const tbody = document.createElement('tbody');
@@ -1007,7 +973,6 @@
         );
 
         activateVizPanel('rainfallVizPanel');
-        addConsoleLine('info', 'Rainfall plot created for ' + file.name);
       } catch (err) {
         addConsoleLine('err', 'Rainfall file error: ' + err.message);
       }
@@ -1059,15 +1024,8 @@
         const text = await file.text();
         const dataset = parseSoilText(text);
 
-        drawSoilTable(
-          soilTableArea,
-          dataset,
-          file.name,
-          'soilTable_' + index
-        );
-
+        drawSoilTable(soilTableArea, dataset, file.name, 'soilTable_' + index);
         activateVizPanel('soilVizPanel');
-        addConsoleLine('info', 'Soil table created for ' + file.name);
       } catch (err) {
         addConsoleLine('err', 'Soil file error: ' + err.message);
       }
@@ -1079,6 +1037,100 @@
     wrapper.appendChild(fileInfo);
 
     return wrapper;
+  }
+
+  function createGeoMapUploadBlock(index) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'geo-map-card';
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'upload-section-title-row';
+
+    const title = document.createElement('span');
+    title.className = 'upload-section-title';
+    title.textContent = 'Geo map ' + index;
+
+    const toggleWrap = document.createElement('label');
+    toggleWrap.className = 'view-toggle-wrap';
+
+    const viewToggle = document.createElement('input');
+    viewToggle.type = 'checkbox';
+    viewToggle.checked = true;
+    viewToggle.disabled = true;
+
+    const toggleText = document.createElement('span');
+    toggleText.textContent = 'View';
+
+    toggleWrap.appendChild(viewToggle);
+    toggleWrap.appendChild(toggleText);
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(toggleWrap);
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.asc,.tif,.tiff';
+    input.hidden = true;
+    input.id = 'geoMapFileInput_' + index;
+
+    const label = document.createElement('label');
+    label.className = 'dropbox';
+    label.htmlFor = input.id;
+    label.innerHTML = `
+      <div class="dropbox-icon">⤒</div>
+      <div class="dropbox-title">Upload geo raster ${index}</div>
+      <div class="dropbox-subtitle">.asc, .tif, .tiff</div>
+    `;
+
+    const fileInfo = document.createElement('div');
+    fileInfo.className = 'field-box compact-box';
+    fileInfo.textContent = 'None';
+
+    const layerKey = 'geo_dynamic_' + (++dynamicLayerCounter);
+
+    input.addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      fileInfo.textContent = file.name;
+      handleRasterFile(file, layerKey, 'Geo Map ' + index, viewToggle);
+    });
+
+    viewToggle.addEventListener('change', function () {
+      const layerObj = rasterLayers[layerKey];
+      if (!layerObj) return;
+
+      layerObj.visible = viewToggle.checked;
+      if (viewToggle.checked) {
+        layerObj.layer.addTo(map);
+        activeLayerKey = layerKey;
+      } else {
+        if (map.hasLayer(layerObj.layer)) map.removeLayer(layerObj.layer);
+      }
+      updateActiveFromVisibleLayers();
+    });
+
+    wrapper.appendChild(titleRow);
+    wrapper.appendChild(input);
+    wrapper.appendChild(label);
+    wrapper.appendChild(fileInfo);
+    return wrapper;
+  }
+
+  function generateGeoMapInputs() {
+    const count = parseInt(geoMapCountInput.value, 10);
+    geoUploadContainer.innerHTML = '';
+
+    if (!Number.isFinite(count) || count < 1) {
+      addConsoleLine('warn', 'Geo map count must be at least 1');
+      return;
+    }
+
+    for (let i = 1; i <= count; i++) {
+      geoUploadContainer.appendChild(createGeoMapUploadBlock(i));
+    }
+
+    addConsoleLine('info', 'Generated ' + count + ' geo map upload input(s)');
   }
 
   function generateRainfallInputs() {
@@ -1093,8 +1145,6 @@
     for (let i = 1; i <= count; i++) {
       rainfallUploadContainer.appendChild(createRainfallUploadBlock(i));
     }
-
-    addConsoleLine('info', 'Generated ' + count + ' rainfall upload input(s)');
   }
 
   function generateSoilInputs() {
@@ -1109,8 +1159,6 @@
     for (let i = 1; i <= count; i++) {
       soilUploadContainer.appendChild(createSoilUploadBlock(i));
     }
-
-    addConsoleLine('info', 'Generated ' + count + ' soil upload input(s)');
   }
 
   function createFormSoilTypeBlock(index) {
@@ -1170,28 +1218,157 @@
     for (let i = 1; i <= count; i++) {
       formSoilTypeContainer.appendChild(createFormSoilTypeBlock(i));
     }
+  }
 
-    addConsoleLine('info', 'Generated FORM inputs for ' + count + ' soil type(s)');
+  function buildMlHyperparametersGrid() {
+    mlHyperparametersGrid.innerHTML = '';
+
+    mlHyperparametersDefaults.forEach(([name, value]) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'field-group';
+
+      const label = document.createElement('div');
+      label.className = 'field-label';
+      label.textContent = name;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'number-input';
+      input.value = value;
+      input.id = 'ml_' + name;
+
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      mlHyperparametersGrid.appendChild(wrap);
+    });
+  }
+
+  function createMlInventoryBlock(index) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'ml-inventory-card';
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'upload-section-title-row';
+
+    const title = document.createElement('span');
+    title.className = 'upload-section-title';
+    title.textContent = 'Landslide inventory ' + index;
+
+    const toggleWrap = document.createElement('label');
+    toggleWrap.className = 'view-toggle-wrap';
+
+    const viewToggle = document.createElement('input');
+    viewToggle.type = 'checkbox';
+    viewToggle.checked = true;
+    viewToggle.disabled = true;
+
+    const toggleText = document.createElement('span');
+    toggleText.textContent = 'View';
+
+    toggleWrap.appendChild(viewToggle);
+    toggleWrap.appendChild(toggleText);
+    titleRow.appendChild(title);
+    titleRow.appendChild(toggleWrap);
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.asc';
+    input.hidden = true;
+    input.id = 'mlInventoryInput_' + index;
+
+    const label = document.createElement('label');
+    label.className = 'dropbox';
+    label.htmlFor = input.id;
+    label.innerHTML = `
+      <div class="dropbox-icon">⤒</div>
+      <div class="dropbox-title">Upload landslide inventory ${index}</div>
+      <div class="dropbox-subtitle">ASC file</div>
+    `;
+
+    const fileInfo = document.createElement('div');
+    fileInfo.className = 'field-box compact-box';
+    fileInfo.textContent = 'None';
+
+    const dateWrap = document.createElement('div');
+    dateWrap.className = 'field-group';
+
+    const dateLabel = document.createElement('div');
+    dateLabel.className = 'field-label';
+    dateLabel.textContent = 'Date value';
+
+    const dateInput = document.createElement('input');
+    dateInput.type = 'text';
+    dateInput.className = 'date-input';
+    dateInput.value = '20210610';
+
+    dateWrap.appendChild(dateLabel);
+    dateWrap.appendChild(dateInput);
+
+    const layerKey = 'ml_inventory_' + (++dynamicLayerCounter);
+
+    input.addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      fileInfo.textContent = file.name;
+      handleRasterFile(file, layerKey, 'Landslide Inventory ' + index + ' (' + dateInput.value + ')', viewToggle);
+      addConsoleLine('info', 'ML inventory date: ' + dateInput.value);
+    });
+
+    viewToggle.addEventListener('change', function () {
+      const layerObj = rasterLayers[layerKey];
+      if (!layerObj) return;
+
+      layerObj.visible = viewToggle.checked;
+      if (viewToggle.checked) {
+        layerObj.layer.addTo(map);
+        activeLayerKey = layerKey;
+      } else {
+        if (map.hasLayer(layerObj.layer)) map.removeLayer(layerObj.layer);
+      }
+      updateActiveFromVisibleLayers();
+    });
+
+    wrapper.appendChild(titleRow);
+    wrapper.appendChild(input);
+    wrapper.appendChild(label);
+    wrapper.appendChild(fileInfo);
+    wrapper.appendChild(dateWrap);
+
+    return wrapper;
+  }
+
+  function generateMlInventoryInputs() {
+    const count = parseInt(mlInventoryCountInput.value, 10);
+    mlInventoryUploadContainer.innerHTML = '';
+
+    if (!Number.isFinite(count) || count < 1) {
+      addConsoleLine('warn', 'Landslide inventory count must be at least 1');
+      return;
+    }
+
+    for (let i = 1; i <= count; i++) {
+      mlInventoryUploadContainer.appendChild(createMlInventoryBlock(i));
+    }
+
+    addConsoleLine('info', 'Generated ' + count + ' ML inventory upload input(s)');
   }
 
   panelTabs.forEach(tab => {
     tab.addEventListener('click', function () {
       activatePanel(tab.dataset.panel);
-      addConsoleLine('info', 'Switched to panel: ' + tab.dataset.panel);
     });
   });
 
   vizTabs.forEach(tab => {
     tab.addEventListener('click', function () {
       activateVizPanel(tab.dataset.viz);
-      addConsoleLine('info', 'Switched to visualise tab: ' + tab.dataset.viz);
     });
   });
 
   rightTabs.forEach(tab => {
     tab.addEventListener('click', function () {
       activateRightPanel(tab.dataset.rightPanel);
-      addConsoleLine('info', 'Switched to right tab: ' + tab.dataset.rightPanel);
     });
   });
 
@@ -1201,11 +1378,8 @@
     if (cfg.input) {
       cfg.input.addEventListener('change', function (e) {
         const file = e.target.files[0];
-        if (!file) {
-          addConsoleLine('warn', 'No file selected for ' + layerKey);
-          return;
-        }
-        handleRasterFile(file, layerKey, cfg.label);
+        if (!file) return;
+        handleRasterFile(file, layerKey, cfg.label, cfg.viewToggle);
       });
     }
 
@@ -1219,15 +1393,10 @@
         if (cfg.viewToggle.checked) {
           layerObj.layer.addTo(map);
           activeLayerKey = layerKey;
-          updateActiveFromVisibleLayers();
-          addConsoleLine('info', cfg.label + ' turned on');
         } else {
-          if (map.hasLayer(layerObj.layer)) {
-            map.removeLayer(layerObj.layer);
-          }
-          addConsoleLine('warn', cfg.label + ' turned off');
-          updateActiveFromVisibleLayers();
+          if (map.hasLayer(layerObj.layer)) map.removeLayer(layerObj.layer);
         }
+        updateActiveFromVisibleLayers();
       });
     }
   });
@@ -1239,7 +1408,6 @@
 
       geotopConfigFileName.textContent = file.name;
       geotopConfigStatus.textContent = 'Reading GeoTOP configuration...';
-      addConsoleLine('info', 'GeoTOP configuration selected: ' + file.name);
 
       try {
         const text = await file.text();
@@ -1275,19 +1443,6 @@
   if (runFormBtn) {
     runFormBtn.addEventListener('click', function () {
       addConsoleLine('info', 'Run FORM to calculate PoF button clicked');
-    });
-  }
-
-  if (mlInventoryInput) {
-    mlInventoryInput.addEventListener('change', function (e) {
-      const files = Array.from(e.target.files || []);
-      if (!files.length) {
-        mlInventoryFileList.textContent = 'None';
-        return;
-      }
-
-      mlInventoryFileList.innerHTML = files.map(f => f.name).join('<br>');
-      addConsoleLine('info', files.length + ' landslide inventory file(s) selected');
     });
   }
 
@@ -1330,6 +1485,8 @@
 
   generateRainfallInputsBtn.addEventListener('click', generateRainfallInputs);
   generateSoilInputsBtn.addEventListener('click', generateSoilInputs);
+  generateGeoMapInputsBtn.addEventListener('click', generateGeoMapInputs);
+  generateMlInventoryInputsBtn.addEventListener('click', generateMlInventoryInputs);
 
   if (typeof proj4 === 'undefined') {
     addConsoleLine('err', 'proj4 library did not load');
@@ -1340,7 +1497,10 @@
   initMap();
   generateRainfallInputs();
   generateSoilInputs();
+  generateGeoMapInputs();
   generateFormInputs();
+  buildMlHyperparametersGrid();
+  generateMlInventoryInputs();
   addConsoleLine('info', 'System initialized');
   addConsoleLine('info', 'Ready. Upload DEM / GeoTOP / FORM / ML inputs.');
 })();

@@ -230,7 +230,8 @@ body {
 
 .field-box,
 .field-select,
-.number-input {
+.number-input,
+.date-input {
     width: 100%;
     min-height: 40px;
     border-radius: 10px;
@@ -264,31 +265,6 @@ body {
 .config-card-title {
     font-weight: 700;
     margin-bottom: 10px;
-}
-
-.mini-setting {
-    margin-bottom: 10px;
-}
-
-.fake-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.fake-tab {
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, .03);
-    border: 1px solid rgba(255, 255, 255, .06);
-    font-size: 12px;
-    font-weight: 700;
-    color: #cbd9eb;
-}
-
-.fake-tab.active {
-    background: rgba(60, 145, 255, .14);
-    color: #63aeff;
 }
 
 .map-wrap {
@@ -643,21 +619,9 @@ body {
     gap: 10px;
 }
 
-.hyperparam-box {
-    width: 100%;
-    min-height: 220px;
-    resize: vertical;
-    border-radius: 10px;
-    border: 1px solid var(--line);
-    background: linear-gradient(180deg, #161f2d, #101722);
-    padding: 10px;
-    color: #dce7f8;
-    line-height: 1.5;
-    font-size: 12px;
-    font-family: "Courier New", monospace;
-}
-
-.form-soil-card {
+.form-soil-card,
+.ml-inventory-card,
+.geo-map-card {
     margin-top: 12px;
     border: 1px solid rgba(255, 255, 255, .08);
     border-radius: 12px;
@@ -676,6 +640,10 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+}
+
+.ml-grid {
+    grid-template-columns: 1fr 1fr;
 }
 
 .leaflet-control-zoom a {
@@ -749,7 +717,8 @@ body {
         width: 820px;
     }
 
-    .form-grid {
+    .form-grid,
+    .ml-grid {
         grid-template-columns: 1fr;
     }
 }
