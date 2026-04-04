@@ -1,7 +1,7 @@
 (function () {
   const rasterConfigs = {
     dem: {
-      label: 'Elevation Map',
+      label: 'DEM Data',
       input: document.getElementById('demFileInput'),
       selectedFile: document.getElementById('demSelectedFile'),
       viewToggle: document.getElementById('demViewToggle')
@@ -236,7 +236,7 @@
     map = L.map('map', {
       center: defaultMapView.center,
       zoom: defaultMapView.zoom,
-      zoomControl: false
+      zoomControl: true
     });
 
     setBaseLayer('osm');
@@ -608,136 +608,7 @@
   }
 
   function activatePanel(panelId) {
-  
-
-  async function runGeotopFromWeb() {
-    try {
-      if (!geotopConfigInput || !geotopConfigInput.files || !geotopConfigInput.files[0]) {
-        geotopConfigStatus.textContent = 'Please upload a GeoTOP configuration file first';
-        addConsoleLine('warn', 'No GeoTOP configuration uploaded');
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('geotop_config', geotopConfigInput.files[0]);
-
-      const manifest = collectFrontendManifest();
-      formData.append('manifest', JSON.stringify(manifest));
-
-      collectAllUploadedFiles().forEach(item => {
-        formData.append('uploaded_files', item.file, item.relativeName);
-      });
-
-      geotopConfigStatus.textContent = 'Submitting GeoTOP job...';
-      addConsoleLine('info', 'Submitting GeoTOP job to backend');
-
-      const response = await fetch('/api/geotop/jobs', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Failed to submit GeoTOP job');
-      }
-
-      const result = await response.json();
-      const jobId = result.job_id;
-      geotopConfigStatus.textContent = `GeoTOP job submitted: ${jobId}`;
-      addConsoleLine('info', `GeoTOP job created: ${jobId}`);
-
-      pollGeotopJob(jobId);
-    } catch (err) {
-      geotopConfigStatus.textContent = 'GeoTOP submission failed';
-      addConsoleLine('err', 'GeoTOP submission error: ' + err.message);
-    }
-  }
-
-  function collectFrontendManifest() {
-    return {
-      crs: crsSelect ? crsSelect.value : 'auto',
-      rainfall_file_count: rainfallCountInput ? rainfallCountInput.value : null,
-      soil_file_count: soilCountInput ? soilCountInput.value : null,
-      geo_map_count: geoMapCountInput ? geoMapCountInput.value : null,
-      exported_at: new Date().toISOString()
-    };
-  }
-
-  function collectAllUploadedFiles() {
-    const files = [];
-    const selectors = [
-      ['demFileInput', 'raster_maps'],
-      ['slopeFileInput', 'raster_maps'],
-      ['soilTypeFileInput', 'raster_maps'],
-      ['soilThicknessFileInput', 'raster_maps'],
-      ['geotopConfigInput', 'config'],
-      ['landUseFileInput', 'other_maps'],
-      ['vegetationFileInput', 'other_maps'],
-      ['lithologyFileInput', 'other_maps']
-    ];
-
-    selectors.forEach(([id, folder]) => {
-      const input = document.getElementById(id);
-      if (input && input.files && input.files[0]) {
-        files.push({ file: input.files[0], relativeName: `${folder}/${input.files[0].name}` });
-      }
-    });
-
-    document.querySelectorAll('#rainfallUploadContainer input[type="file"]').forEach((input, idx) => {
-      if (input.files && input.files[0]) {
-        files.push({ file: input.files[0], relativeName: `rainfall/${idx + 1}_${input.files[0].name}` });
-      }
-    });
-
-    document.querySelectorAll('#soilUploadContainer input[type="file"]').forEach((input, idx) => {
-      if (input.files && input.files[0]) {
-        files.push({ file: input.files[0], relativeName: `soil_properties/${idx + 1}_${input.files[0].name}` });
-      }
-    });
-
-    document.querySelectorAll('#geoUploadContainer input[type="file"]').forEach((input, idx) => {
-      if (input.files && input.files[0]) {
-        files.push({ file: input.files[0], relativeName: `other_maps/${idx + 1}_${input.files[0].name}` });
-      }
-    });
-
-    return files;
-  }
-
-  async function pollGeotopJob(jobId) {
-    let finished = false;
-
-    while (!finished) {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      try {
-        const response = await fetch(`/api/geotop/jobs/${jobId}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch job status');
-        }
-
-        const data = await response.json();
-        geotopConfigStatus.textContent = `GeoTOP status: ${data.status}`;
-
-        if (data.status === 'completed') {
-          addConsoleLine('info', `GeoTOP completed: ${jobId}`);
-          if (data.stdout_tail) addConsoleLine('info', data.stdout_tail);
-          finished = true;
-        } else if (data.status === 'failed') {
-          addConsoleLine('err', `GeoTOP failed: ${jobId}`);
-          if (data.stderr_tail) addConsoleLine('err', data.stderr_tail);
-          finished = true;
-        } else {
-          addConsoleLine('info', `GeoTOP job ${jobId}: ${data.status}`);
-        }
-      } catch (err) {
-        addConsoleLine('err', 'GeoTOP polling error: ' + err.message);
-        finished = true;
-      }
-    }
-  }
-
-  panelTabs.forEach(tab => {
+    panelTabs.forEach(tab => {
       tab.classList.toggle('active', tab.dataset.panel === panelId);
     });
 
@@ -1539,7 +1410,7 @@
     });
   }
 
-  if (runGeotopBtn) runGeotopBtn.addEventListener('click', runGeotopFromWeb);
+  if (runGeotopBtn) runGeotopBtn.addEventListener('click', runGeotopFromWebsite);
   if (generateFormInputsBtn) generateFormInputsBtn.addEventListener('click', generateFormInputs);
   if (runFormBtn) runFormBtn.addEventListener('click', function () { addConsoleLine('info', 'Run FORM to calculate PoF button clicked'); });
   if (mlTrainingBtn) mlTrainingBtn.addEventListener('click', function () { addConsoleLine('info', 'Machine Learning: Training button clicked'); });
@@ -1587,7 +1458,7 @@
   rightTabs.forEach(tab => {
     tab.addEventListener('click', playTabSound);
   });
-
+    
   initMap();
   generateRainfallInputs();
   generateSoilInputs();
@@ -1640,4 +1511,227 @@
       console.warn('Tab sound failed:', err);
     }
   }  
+
+  const geotopCaseFolderInput = document.getElementById('geotopCaseFolderInput');
+  const geotopCaseFolderName = document.getElementById('geotopCaseFolderName');
+  const geotopCaseFolderSummary = document.getElementById('geotopCaseFolderSummary');
+  const geotopOutputsSection = document.getElementById('geotopOutputsSection');
+  const geotopOutputSelect = document.getElementById('geotopOutputSelect');
+  const loadGeotopOutputBtn = document.getElementById('loadGeotopOutputBtn');
+  const downloadGeotopOutputBtn = document.getElementById('downloadGeotopOutputBtn');
+
+  let lastGeotopJobId = null;
+
+  function summarizeCaseFolder(fileList) {
+    const paths = Array.from(fileList || []).map(f => f.webkitRelativePath || f.name);
+    const hasInpts = paths.some(p => /(^|\/)geotop\.inpts$/i.test(p));
+    const hasMeteo = paths.some(p => /(^|\/)meteo\//i.test(p));
+    const hasSoil = paths.some(p => /(^|\/)soil\//i.test(p));
+    const hasInputMaps = paths.some(p => /(^|\/)input_maps\//i.test(p));
+    const root = paths.length ? (paths[0].split('/')[0] || 'selected_folder') : 'None';
+    const missing = [];
+    if (!hasInpts) missing.push('geotop.inpts');
+    if (!hasMeteo) missing.push('meteo/');
+    if (!hasSoil) missing.push('soil/');
+    if (!hasInputMaps) missing.push('input_maps/');
+    return {root, count: paths.length, hasInpts, hasMeteo, hasSoil, hasInputMaps, missing};
+  }
+
+  function updateCaseFolderUi() {
+    if (!geotopCaseFolderInput) return;
+    const files = geotopCaseFolderInput.files;
+    if (!files || !files.length) {
+      geotopCaseFolderName.textContent = 'None';
+      geotopCaseFolderSummary.textContent = 'No case folder selected.';
+      return;
+    }
+    const summary = summarizeCaseFolder(files);
+    geotopCaseFolderName.textContent = `${summary.root} (${summary.count} file(s))`;
+    if (summary.missing.length) {
+      geotopCaseFolderSummary.innerHTML = `Folder selected, but missing: ${summary.missing.join(', ')}<br>Required structure: geotop.inpts, meteo/, soil/, input_maps/.`;
+      addConsoleLine('warn', `GeoTOP case folder selected but missing: ${summary.missing.join(', ')}`);
+    } else {
+      geotopCaseFolderSummary.innerHTML = 'GeoTOP case folder looks valid.<br>Detected geotop.inpts, meteo/, soil/, input_maps/.';
+      addConsoleLine('info', `GeoTOP case folder ready: ${summary.root}`);
+    }
+  }
+
+  function collectGeoTopSubmissionFiles() {
+    const files = [];
+    if (geotopCaseFolderInput && geotopCaseFolderInput.files && geotopCaseFolderInput.files.length) {
+      Array.from(geotopCaseFolderInput.files).forEach(file => {
+        const rel = file.webkitRelativePath || file.name;
+        files.push({ file, relativePath: rel });
+      });
+      return files;
+    }
+
+    // Fallback: build a case folder from the current UI uploads
+    const caseRoot = 'web_case';
+    const addFrom = (id, relPath) => {
+      const input = document.getElementById(id);
+      if (input && input.files && input.files[0]) {
+        files.push({ file: input.files[0], relativePath: `${caseRoot}/${relPath}` });
+      }
+    };
+
+    addFrom('geotopConfigInput', 'geotop.inpts');
+    addFrom('demFileInput', 'input_maps/pit.asc');
+    addFrom('soilTypeFileInput', 'input_maps/soiltype.asc');
+    addFrom('slopeFileInput', 'input_maps/slope.asc');
+    addFrom('soilThicknessFileInput', 'input_maps/soilthickness.asc');
+
+    document.querySelectorAll('#rainfallUploadContainer input[type="file"]').forEach((input, idx) => {
+      if (input.files && input.files[0]) {
+        const file = input.files[0];
+        files.push({ file, relativePath: `${caseRoot}/meteo/${file.name || ('meteo' + String(idx + 1).padStart(4, '0'))}` });
+      }
+    });
+
+    document.querySelectorAll('#soilUploadContainer input[type="file"]').forEach((input, idx) => {
+      if (input.files && input.files[0]) {
+        const file = input.files[0];
+        files.push({ file, relativePath: `${caseRoot}/soil/${file.name || ('soil' + String(idx + 1).padStart(4, '0'))}` });
+      }
+    });
+
+    return files;
+  }
+
+  async function runGeotopFromWebsite() {
+    try {
+      const files = collectGeoTopSubmissionFiles();
+      if (!files.length) {
+        geotopConfigStatus.textContent = 'Upload a GeoTOP case folder or the required files first.';
+        addConsoleLine('warn', 'No GeoTOP files found for submission');
+        return;
+      }
+
+      const formData = new FormData();
+      files.forEach(item => formData.append('case_files', item.file, item.relativePath));
+      formData.append('manifest', JSON.stringify({
+        submitted_at: new Date().toISOString(),
+        crs: crsSelect ? crsSelect.value : 'auto',
+        frontend_case_mode: (geotopCaseFolderInput && geotopCaseFolderInput.files && geotopCaseFolderInput.files.length) ? 'folder-upload' : 'ui-fallback'
+      }));
+
+      geotopConfigStatus.textContent = 'Submitting GeoTOP job...';
+      addConsoleLine('info', 'Submitting GeoTOP job to backend API');
+
+      const response = await fetch('/api/geotop/jobs', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text() || 'Failed to submit GeoTOP job');
+      }
+
+      const data = await response.json();
+      lastGeotopJobId = data.job_id;
+      geotopConfigStatus.textContent = `GeoTOP job submitted: ${data.job_id}`;
+      addConsoleLine('info', `GeoTOP job created: ${data.job_id}`);
+      pollGeotopJob(data.job_id);
+    } catch (err) {
+      geotopConfigStatus.textContent = 'GeoTOP submission failed.';
+      addConsoleLine('err', 'GeoTOP submission error: ' + err.message);
+    }
+  }
+
+  async function pollGeotopJob(jobId) {
+    let done = false;
+    while (!done) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      try {
+        const response = await fetch(`/api/geotop/jobs/${jobId}`);
+        if (!response.ok) throw new Error('Failed to fetch GeoTOP job status');
+        const data = await response.json();
+        geotopConfigStatus.textContent = `GeoTOP status: ${data.status}`;
+        if (data.status === 'completed') {
+          addConsoleLine('info', `GeoTOP completed: ${jobId}`);
+          if (data.stdout_tail) addConsoleLine('info', data.stdout_tail);
+          await refreshGeotopOutputs(jobId);
+          done = true;
+        } else if (data.status === 'failed') {
+          addConsoleLine('err', `GeoTOP failed: ${jobId}`);
+          if (data.stderr_tail) addConsoleLine('err', data.stderr_tail);
+          done = true;
+        } else {
+          addConsoleLine('info', `GeoTOP job ${jobId}: ${data.status}`);
+        }
+      } catch (err) {
+        addConsoleLine('err', 'GeoTOP polling error: ' + err.message);
+        done = true;
+      }
+    }
+  }
+
+  async function refreshGeotopOutputs(jobId) {
+    try {
+      const response = await fetch(`/api/geotop/jobs/${jobId}/outputs`);
+      if (!response.ok) throw new Error('Failed to list output maps');
+      const data = await response.json();
+      const outputs = data.files || [];
+      geotopOutputSelect.innerHTML = '';
+      if (!outputs.length) {
+        geotopOutputsSection.style.display = 'none';
+        addConsoleLine('warn', 'GeoTOP finished but no output-maps files were found');
+        return;
+      }
+      outputs.forEach(relPath => {
+        const opt = document.createElement('option');
+        opt.value = relPath;
+        opt.textContent = relPath;
+        geotopOutputSelect.appendChild(opt);
+      });
+      geotopOutputsSection.style.display = 'block';
+      addConsoleLine('info', `Found ${outputs.length} file(s) under output-maps`);
+    } catch (err) {
+      addConsoleLine('err', 'Output listing error: ' + err.message);
+    }
+  }
+
+  async function loadSelectedGeotopOutput() {
+    try {
+      if (!lastGeotopJobId || !geotopOutputSelect.value) return;
+      const relPath = encodeURIComponent(geotopOutputSelect.value);
+      const response = await fetch(`/api/geotop/jobs/${lastGeotopJobId}/outputs/${relPath}`);
+      if (!response.ok) throw new Error('Failed to load selected output file');
+      const contentType = response.headers.get('content-type') || '';
+      const fileName = geotopOutputSelect.value.split('/').pop();
+      const layerKey = 'geotop_output_' + (++dynamicLayerCounter);
+      if (fileName.toLowerCase().endsWith('.asc') || contentType.includes('text/plain')) {
+        const text = await response.text();
+        const asc = parseAsc(text);
+        addAscLayer(asc, fileName, layerKey, fileName, null);
+        addConsoleLine('info', `Loaded GeoTOP output on map: ${fileName}`);
+      } else {
+        const blob = await response.blob();
+        const file = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
+        await handleRasterFile(file, layerKey, fileName, null);
+        addConsoleLine('info', `Loaded GeoTOP output on map: ${fileName}`);
+      }
+    } catch (err) {
+      addConsoleLine('err', 'Failed to load GeoTOP output: ' + err.message);
+    }
+  }
+
+  function downloadSelectedGeotopOutput() {
+    if (!lastGeotopJobId || !geotopOutputSelect.value) return;
+    const relPath = encodeURIComponent(geotopOutputSelect.value);
+    window.open(`/api/geotop/jobs/${lastGeotopJobId}/outputs/${relPath}?download=1`, '_blank');
+  }
+
+  if (geotopCaseFolderInput) {
+    geotopCaseFolderInput.addEventListener('change', updateCaseFolderUi);
+  }
+
+  if (loadGeotopOutputBtn) {
+    loadGeotopOutputBtn.addEventListener('click', loadSelectedGeotopOutput);
+  }
+
+  if (downloadGeotopOutputBtn) {
+    downloadGeotopOutputBtn.addEventListener('click', downloadSelectedGeotopOutput);
+  }
+
 })();

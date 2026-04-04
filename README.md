@@ -1,84 +1,120 @@
-# GeoTOP web starter for your landslide app
 
-This starter keeps your current frontend and adds a FastAPI backend + Docker Compose so the **Run GeoTOP** button can submit a real backend job.
+# GeoTOP cloud website starter
 
-## Recommended folder structure
+This package turns your current UI into a real website that can submit a GeoTOP case folder to a backend, run GeoTOP on Linux, and browse files created under `output-maps/`.
 
-```text
-geotop_webapp_starter/
-  frontend/public/
-    index.html
-    style.css
-    script.js
-    images/
-  backend/
-    Dockerfile
-    requirements.txt
-    app/main.py
-  nginx/default.conf
-  runtime/jobs/
-  docker-compose.yml
-  .env.example
-```
+## What this package does
 
-## What this starter already does
+- Keeps your current frontend look and controls.
+- Adds **Upload GeoTOP case folder** in the GeoTOP panel.
+- Sends the selected folder to a FastAPI backend.
+- Rebuilds the case folder on the server with the same structure, for example:
 
-- serves your website with Nginx
-- proxies `/api/*` to FastAPI
-- lets the frontend upload the GeoTOP configuration plus all other uploaded files to the backend
-- creates a job folder per run under `runtime/jobs/<job_id>/`
-- launches GeoTOP as a background process
-- stores stdout/stderr logs
-- lets the frontend poll job status
+  ```
+  zihao_geotop_2/
+    geotop.inpts
+    meteo/meteo0001
+    soil/soil0001
+    soil/soil0002
+    soil/soil0003
+    input_maps/pit.asc
+    input_maps/soiltype.asc
+  ```
 
-## What you still must adapt
+- Runs GeoTOP as:
 
-### 1. GeoTOP executable path
-Edit `.env` from `.env.example` and set:
+  ```bash
+  /path/to/geotop <case_folder>
+  ```
 
-```env
-GEOTOP_COMMAND=/absolute/path/to/your/geotop
-```
+- Stores logs and output files in `runtime/jobs/<job_id>/...`
+- Lets the frontend list files found under `output-maps/`, load ASC outputs onto the map, or download them.
 
-### 2. GeoTOP command style
-This starter currently runs:
+## Recommended cloud setup
 
-```bash
-$GEOTOP_COMMAND inputs/geotop.inpts
-```
+Use **one Ubuntu VPS** first.
 
-If your local Ubuntu command is different, edit `backend/app/main.py` in the `command = [...]` line.
+- Put this project on the VPS.
+- Build and run it with Docker Compose.
+- Point your domain to the VPS.
+- Later, add a queue/worker if many users run jobs at once.
 
-### 3. GeoTOP input naming
-The uploaded main configuration is saved as `inputs/geotop.inpts` by default. If your real config file must have another name, set:
+## Why not GitHub Pages alone?
 
-```env
-GEOTOP_CONFIG_NAME=your_real_file_name_here
-```
+GitHub Pages only hosts static HTML/CSS/JS. It cannot execute GeoTOP or any server-side process. Use GitHub for the repository, and use a VPS/cloud VM for the running website.
 
-### 4. Supplementary files
-The frontend sends all uploaded web files into the backend job folder under subfolders like:
-
-- `inputs/raster_maps/...`
-- `inputs/rainfall/...`
-- `inputs/soil_properties/...`
-- `inputs/other_maps/...`
-
-If your GeoTOP config expects exact relative file names, make sure the uploaded names match, or adjust the backend save logic.
-
-## Local run on a VPS
+## Quick start with Docker
 
 ```bash
-cp .env.example .env
-# edit .env
-mkdir -p runtime/jobs
-sudo docker compose up --build
+cd geotop_cloud_app
+docker compose up --build
 ```
 
 Then open:
 
-- `http://YOUR_SERVER_IP/`
+- `http://YOUR_SERVER_IP:8000`
+- API health check: `http://YOUR_SERVER_IP:8000/api/health`
 
-## Suggested next upgrade
+## Important note about GeoTOP compilation
 
-For many users later, do **not** keep long-running jobs inside the web API process. Move GeoTOP execution into a queue/worker setup such as Redis + Celery/RQ.
+The Dockerfile tries to clone the official GeoTOP repository, check out `v3.0`, and compile it with CMake.
+
+If that build fails on your server, do this instead:
+
+1. Build GeoTOP directly on Ubuntu with:
+   ```bash
+   ./scripts/install_geotop_host.sh
+   ```
+2. Edit `docker-compose.yml` and replace:
+   ```yaml
+   GEOTOP_BIN: /opt/geotop-src/cmake-build/geotop
+   ```
+   with your real host path, for example:
+   ```yaml
+   GEOTOP_BIN: /home/ubuntu/geotop/geotop/cmake-build/geotop
+   ```
+3. Run the backend without containerizing GeoTOP, or rebuild the container and mount that path.
+
+## How to use the website
+
+### Best method: upload the whole GeoTOP case folder
+
+In the GeoTOP panel, click **Upload GeoTOP case folder** and choose the folder that contains:
+
+- `geotop.inpts`
+- `meteo/`
+- `soil/`
+- `input_maps/`
+
+This is the safest method because the backend recreates the same folder structure you already use locally.
+
+### Run button
+
+Click **Run GeoTOP to calculate pore-water pressure (PWP)**.
+
+The backend will:
+
+1. create a job folder
+2. rebuild the uploaded case
+3. run GeoTOP against that case directory
+4. stream status back to the frontend
+5. expose files found in `output-maps/`
+
+## API endpoints
+
+- `POST /api/geotop/jobs` — upload a GeoTOP case and create a job
+- `GET /api/geotop/jobs/{job_id}` — poll job status
+- `GET /api/geotop/jobs/{job_id}/outputs` — list `output-maps` files
+- `GET /api/geotop/jobs/{job_id}/outputs/{rel_path}` — download an output file
+
+## Scaling later
+
+For many users, change the execution model from simple background threads to a real queue.
+
+Typical next steps:
+
+- Redis + RQ/Celery worker
+- one web service + one or more worker services
+- per-user quotas
+- job cleanup policy
+- separate object storage for large outputs

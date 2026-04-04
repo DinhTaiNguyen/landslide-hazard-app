@@ -1,212 +1,200 @@
-import asyncio
+
 import json
 import os
 import shutil
+import subprocess
+import threading
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-DATA_ROOT = Path(os.getenv('GEOTOP_DATA_ROOT', APP_ROOT / 'runtime'))
-JOBS_ROOT = DATA_ROOT / 'jobs'
-JOBS_ROOT.mkdir(parents=True, exist_ok=True)
+BASE_DIR = Path(__file__).resolve().parents[2]
+FRONTEND_DIR = BASE_DIR / "frontend"
+JOBS_DIR = Path(os.getenv("JOBS_DIR", BASE_DIR / "runtime" / "jobs"))
+GEOTOP_BIN = os.getenv("GEOTOP_BIN", "/opt/geotop/cmake-build/geotop")
+POLL_LINES = int(os.getenv("POLL_LINES", "40"))
 
-# Edit this to match how GeoTOP is launched on your Ubuntu machine.
-# Examples:
-#   GEOTOP_COMMAND="/opt/geotop/geotop"
-#   GEOTOP_COMMAND="/usr/local/bin/geotop"
-GEOTOP_COMMAND = os.getenv('GEOTOP_COMMAND', '/opt/geotop/geotop')
-# Optional extra flags, split by spaces.
-GEOTOP_EXTRA_ARGS = os.getenv('GEOTOP_EXTRA_ARGS', '')
-# File name used for the uploaded GeoTOP config inside each job folder.
-GEOTOP_CONFIG_NAME = os.getenv('GEOTOP_CONFIG_NAME', 'geotop.inpts')
+JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title='GeoTOP Web API')
+app = FastAPI(title="GeoTOP Web Runner")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-
-class JobInfo(BaseModel):
-    job_id: str
-    status: str
-    created_at: str
-    started_at: Optional[str] = None
-    finished_at: Optional[str] = None
-    command: Optional[List[str]] = None
-    stdout_path: Optional[str] = None
-    stderr_path: Optional[str] = None
-    outputs_dir: Optional[str] = None
-    error: Optional[str] = None
+job_states = {}
+job_lock = threading.Lock()
 
 
-JOBS: Dict[str, JobInfo] = {}
-JOB_LOCK = asyncio.Lock()
+def tail_text(path: Path, lines: int = POLL_LINES) -> str:
+    if not path.exists():
+        return ""
+    content = path.read_text(errors="ignore").splitlines()
+    return "\n".join(content[-lines:])
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def set_job_state(job_id: str, **kwargs):
+    with job_lock:
+        state = job_states.setdefault(job_id, {})
+        state.update(kwargs)
+        state.setdefault("job_id", job_id)
 
 
-def safe_join_job(job_id: str, *parts: str) -> Path:
-    job_dir = JOBS_ROOT / job_id
-    return job_dir.joinpath(*parts)
+def get_job_state(job_id: str):
+    with job_lock:
+        return dict(job_states.get(job_id, {}))
 
 
-def read_tail(path: Optional[str], limit: int = 4000) -> str:
-    if not path:
-        return ''
-    p = Path(path)
-    if not p.exists():
-        return ''
-    text = p.read_text(errors='ignore')
-    return text[-limit:]
-
-
-def save_upload(upload: UploadFile, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with destination.open('wb') as f:
+def write_upload(upload: UploadFile, target: Path):
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("wb") as f:
         shutil.copyfileobj(upload.file, f)
 
 
-@app.get('/api/health')
-async def health():
-    return {'ok': True, 'geotop_command': GEOTOP_COMMAND}
+def resolve_case_root(names: List[str]) -> str:
+    if not names:
+        return "case"
+    first = names[0].replace("\\", "/")
+    if "/" in first:
+        return first.split("/")[0]
+    return "case"
 
 
-@app.post('/api/geotop/jobs')
-async def create_geotop_job(
-    geotop_config: UploadFile = File(...),
-    uploaded_files: List[UploadFile] = File(default=[]),
-    manifest: str = Form(default='{}'),
-):
-    job_id = uuid.uuid4().hex[:12]
-    job_dir = JOBS_ROOT / job_id
-    inputs_dir = job_dir / 'inputs'
-    outputs_dir = job_dir / 'outputs'
-    logs_dir = job_dir / 'logs'
-    for d in (inputs_dir, outputs_dir, logs_dir):
-        d.mkdir(parents=True, exist_ok=True)
+def run_geotop_job(job_id: str, case_dir: Path):
+    stdout_path = JOBS_DIR / job_id / "stdout.log"
+    stderr_path = JOBS_DIR / job_id / "stderr.log"
+    set_job_state(job_id, status="running", case_dir=str(case_dir))
 
-    # Save manifest for debugging/reproducibility.
+    if not Path(GEOTOP_BIN).exists():
+        stderr_path.write_text(f"GeoTOP binary not found at {GEOTOP_BIN}\n")
+        set_job_state(job_id, status="failed", error=f"GeoTOP binary not found at {GEOTOP_BIN}")
+        return
+
+    cmd = [GEOTOP_BIN, str(case_dir)]
     try:
-        manifest_data = json.loads(manifest) if manifest else {}
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail=f'Invalid manifest JSON: {exc}')
-
-    (job_dir / 'manifest.json').write_text(json.dumps(manifest_data, indent=2))
-
-    # Save primary GeoTOP config with a fixed name unless you change env.
-    config_path = inputs_dir / GEOTOP_CONFIG_NAME
-    save_upload(geotop_config, config_path)
-
-    # Save all uploaded supplemental files.
-    for upload in uploaded_files:
-        filename = Path(upload.filename).name
-        # filename may contain prefixed folders passed from frontend like rainfall/x.csv
-        rel = Path(upload.filename)
-        destination = inputs_dir / rel
-        save_upload(upload, destination)
-
-    stdout_path = logs_dir / 'stdout.log'
-    stderr_path = logs_dir / 'stderr.log'
-
-    extra_args = [arg for arg in GEOTOP_EXTRA_ARGS.split(' ') if arg]
-    command = [GEOTOP_COMMAND, str(config_path), *extra_args]
-
-    info = JobInfo(
-        job_id=job_id,
-        status='queued',
-        created_at=utc_now(),
-        command=command,
-        stdout_path=str(stdout_path),
-        stderr_path=str(stderr_path),
-        outputs_dir=str(outputs_dir),
-    )
-
-    async with JOB_LOCK:
-        JOBS[job_id] = info
-
-    asyncio.create_task(run_geotop_job(job_id, job_dir, inputs_dir, outputs_dir, stdout_path, stderr_path, command))
-
-    return JSONResponse({'job_id': job_id, 'status': info.status})
-
-
-async def run_geotop_job(job_id: str, job_dir: Path, inputs_dir: Path, outputs_dir: Path, stdout_path: Path, stderr_path: Path, command: List[str]):
-    async with JOB_LOCK:
-        job = JOBS[job_id]
-        job.status = 'running'
-        job.started_at = utc_now()
-        JOBS[job_id] = job
-
-    env = os.environ.copy()
-    env['GEOTOP_OUTPUT_DIR'] = str(outputs_dir)
-
-    stdout_f = stdout_path.open('wb')
-    stderr_f = stderr_path.open('wb')
-
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            cwd=str(inputs_dir),
-            stdout=stdout_f,
-            stderr=stderr_f,
-            env=env,
+        proc = subprocess.run(
+            cmd,
+            cwd=str(case_dir.parent),
+            capture_output=True,
+            text=True,
+            check=False,
         )
-        return_code = await process.wait()
-
-        async with JOB_LOCK:
-            job = JOBS[job_id]
-            if return_code == 0:
-                job.status = 'completed'
-            else:
-                job.status = 'failed'
-                job.error = f'GeoTOP exited with code {return_code}'
-            job.finished_at = utc_now()
-            JOBS[job_id] = job
+        stdout_path.write_text(proc.stdout or "")
+        stderr_path.write_text(proc.stderr or "")
+        output_maps_dir = case_dir / "output-maps"
+        outputs = []
+        if output_maps_dir.exists():
+            outputs = sorted(str(p.relative_to(case_dir)).replace("\\", "/") for p in output_maps_dir.rglob("*") if p.is_file())
+        if proc.returncode == 0:
+            set_job_state(job_id, status="completed", returncode=proc.returncode, outputs=outputs)
+        else:
+            set_job_state(job_id, status="failed", returncode=proc.returncode, outputs=outputs, error="GeoTOP returned non-zero exit code")
     except Exception as exc:
-        async with JOB_LOCK:
-            job = JOBS[job_id]
-            job.status = 'failed'
-            job.error = str(exc)
-            job.finished_at = utc_now()
-            JOBS[job_id] = job
-    finally:
-        stdout_f.close()
-        stderr_f.close()
+        stderr_path.write_text(str(exc))
+        set_job_state(job_id, status="failed", error=str(exc))
 
 
-@app.get('/api/geotop/jobs/{job_id}')
-async def get_job(job_id: str):
-    async with JOB_LOCK:
-        job = JOBS.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail='Job not found')
-
-    payload = job.model_dump()
-    payload['stdout_tail'] = read_tail(job.stdout_path)
-    payload['stderr_tail'] = read_tail(job.stderr_path)
-    return JSONResponse(payload)
+@app.get("/api/health")
+def health():
+    return {"ok": True, "geotop_bin": GEOTOP_BIN, "jobs_dir": str(JOBS_DIR)}
 
 
-@app.get('/api/geotop/jobs/{job_id}/logs')
-async def get_job_logs(job_id: str):
-    async with JOB_LOCK:
-        job = JOBS.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail='Job not found')
-    return {
-        'job_id': job_id,
-        'stdout': read_tail(job.stdout_path, limit=20000),
-        'stderr': read_tail(job.stderr_path, limit=20000),
-    }
+@app.post("/api/geotop/jobs")
+async def create_geotop_job(
+    case_files: List[UploadFile] = File(default=[]),
+    manifest: Optional[str] = Form(default=None),
+):
+    if not case_files:
+        raise HTTPException(status_code=400, detail="No GeoTOP case files were uploaded")
+
+    job_id = uuid.uuid4().hex[:12]
+    job_dir = JOBS_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_names = [f.filename for f in case_files if f.filename]
+    case_root = resolve_case_root(raw_names)
+    case_dir = job_dir / case_root
+    case_dir.mkdir(parents=True, exist_ok=True)
+
+    uploaded = []
+    for upload in case_files:
+        rel = (upload.filename or upload.filename or "uploaded_file").replace("\\", "/")
+        parts = [p for p in rel.split("/") if p not in ("", ".")]
+        if parts and parts[0] == case_root:
+            parts = parts[1:]
+        if not parts:
+            parts = [upload.filename or "uploaded_file"]
+        target = case_dir.joinpath(*parts)
+        upload.file.seek(0)
+        write_upload(upload, target)
+        uploaded.append(str(target.relative_to(case_dir)).replace("\\", "/"))
+
+    if manifest:
+        try:
+            parsed = json.loads(manifest)
+        except Exception:
+            parsed = {"raw_manifest": manifest}
+        (job_dir / "manifest.json").write_text(json.dumps(parsed, indent=2))
+
+    geotop_inpts = case_dir / "geotop.inpts"
+    if not geotop_inpts.exists():
+        raise HTTPException(status_code=400, detail="Uploaded case folder does not contain geotop.inpts")
+
+    set_job_state(job_id, status="queued", case_dir=str(case_dir), uploaded=uploaded)
+    thread = threading.Thread(target=run_geotop_job, args=(job_id, case_dir), daemon=True)
+    thread.start()
+
+    return {"job_id": job_id, "status": "queued", "case_root": case_root}
+
+
+@app.get("/api/geotop/jobs/{job_id}")
+def get_geotop_job(job_id: str):
+    state = get_job_state(job_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Job not found")
+    stdout_path = JOBS_DIR / job_id / "stdout.log"
+    stderr_path = JOBS_DIR / job_id / "stderr.log"
+    state["stdout_tail"] = tail_text(stdout_path)
+    state["stderr_tail"] = tail_text(stderr_path)
+    return state
+
+
+@app.get("/api/geotop/jobs/{job_id}/outputs")
+def list_outputs(job_id: str):
+    state = get_job_state(job_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Job not found")
+    outputs = state.get("outputs", [])
+    return {"job_id": job_id, "files": outputs}
+
+
+@app.get("/api/geotop/jobs/{job_id}/outputs/{rel_path:path}")
+def fetch_output(job_id: str, rel_path: str, download: int = Query(default=0)):
+    state = get_job_state(job_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Job not found")
+    case_dir = Path(state.get("case_dir", ""))
+    if not case_dir.exists():
+        raise HTTPException(status_code=404, detail="Case directory missing")
+    safe = Path(rel_path)
+    target = (case_dir / safe).resolve()
+    try:
+        target.relative_to(case_dir.resolve())
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Output file not found")
+    media_type = "text/plain" if target.suffix.lower() == ".asc" else None
+    filename = target.name if download else None
+    return FileResponse(target, media_type=media_type, filename=filename)
+
+
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
