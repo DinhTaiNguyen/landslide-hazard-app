@@ -6,7 +6,7 @@
   <title>Landslide Hazard App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="style.css" />
-    <script src="config.js"></script>
+  <script src="config.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -15,7 +15,7 @@
         <img src="images/GeoXPM_logo_3D.png" alt="GeoXPM Logo" class="brand-logo" />
         <div>
           <div class="brand-title">MCG Landslide Hazard Mapping Predictor Pro</div>
-          <div class="brand-subtitle">FORM-based probability of failure workflow with website upload, runtime log, and downloadable result maps</div>
+          <div class="brand-subtitle">FORM + Machine Learning workflow with direct web upload, job running logs, map preview, and downloadable results</div>
         </div>
       </div>
       <div class="backend-line">
@@ -28,9 +28,8 @@
 
     <aside class="card side-panel left-panel">
       <div class="panel-title">Data Input</div>
-
       <div class="section-block">
-        <div class="section-title">Required raster maps</div>
+        <div class="section-title">Required raster maps for FORM</div>
         <div class="field-group">
           <label class="field-label" for="crsSelect">Coordinate reference system</label>
           <select id="crsSelect" class="field-input">
@@ -43,40 +42,25 @@
         </div>
 
         <div class="upload-card">
-          <div class="upload-row-head">
-            <span>DEM (optional preview only)</span>
-            <label><input id="demViewToggle" type="checkbox" checked disabled /> View</label>
-          </div>
+          <div class="upload-row-head"><span>DEM</span><label><input id="demViewToggle" type="checkbox" checked disabled /> View</label></div>
           <input id="demFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
           <label for="demFileInput" class="dropbox">Upload DEM raster</label>
           <div id="demSelectedFile" class="file-chip">None</div>
         </div>
-
         <div class="upload-card">
-          <div class="upload-row-head">
-            <span>Slope map</span>
-            <label><input id="slopeViewToggle" type="checkbox" checked disabled /> View</label>
-          </div>
+          <div class="upload-row-head"><span>Slope map</span><label><input id="slopeViewToggle" type="checkbox" checked disabled /> View</label></div>
           <input id="slopeFileInput" type="file" accept=".asc" hidden />
           <label for="slopeFileInput" class="dropbox required">Upload slope.asc</label>
           <div id="slopeSelectedFile" class="file-chip">None</div>
         </div>
-
         <div class="upload-card">
-          <div class="upload-row-head">
-            <span>Soil type map</span>
-            <label><input id="soilTypeViewToggle" type="checkbox" checked disabled /> View</label>
-          </div>
+          <div class="upload-row-head"><span>Soil type map</span><label><input id="soilTypeViewToggle" type="checkbox" checked disabled /> View</label></div>
           <input id="soilTypeFileInput" type="file" accept=".asc" hidden />
           <label for="soilTypeFileInput" class="dropbox required">Upload soiltype.asc</label>
           <div id="soilTypeSelectedFile" class="file-chip">None</div>
         </div>
-
         <div class="upload-card">
-          <div class="upload-row-head">
-            <span>Soil thickness map</span>
-            <label><input id="soilThicknessViewToggle" type="checkbox" checked disabled /> View</label>
-          </div>
+          <div class="upload-row-head"><span>Soil thickness map</span><label><input id="soilThicknessViewToggle" type="checkbox" checked disabled /> View</label></div>
           <input id="soilThicknessFileInput" type="file" accept=".asc" hidden />
           <label for="soilThicknessFileInput" class="dropbox required">Upload soilthickness.asc</label>
           <div id="soilThicknessSelectedFile" class="file-chip">None</div>
@@ -125,83 +109,109 @@
       </div>
 
       <div class="bottom-panel">
-        <div class="tab-row">
+        <div class="tab-row wrap-tabs">
           <button class="viz-tab active" data-viz="formRunningPanel" type="button">FORM running</button>
           <button class="viz-tab" data-viz="inputSummaryPanel" type="button">Input summary</button>
           <button class="viz-tab" data-viz="resultSummaryPanel" type="button">Result summary</button>
+          <button class="viz-tab" data-viz="mlRunningPanel" type="button">Machine Learning Running</button>
+          <button class="viz-tab" data-viz="dataPrepPanel" type="button">Data Preparation</button>
+          <button class="viz-tab" data-viz="mlAnalysePanel" type="button">Machine Learning Analyse Plot</button>
         </div>
 
-        <section id="formRunningPanel" class="viz-panel active">
-          <div id="consoleContent" class="console-panel"></div>
-        </section>
-
-        <section id="inputSummaryPanel" class="viz-panel">
-          <div id="inputSummaryContent" class="summary-scroll">No input summary yet.</div>
-        </section>
-
-        <section id="resultSummaryPanel" class="viz-panel">
-          <div id="resultSummaryContent" class="summary-scroll">No result summary yet.</div>
-        </section>
+        <section id="formRunningPanel" class="viz-panel active"><div id="consoleContent" class="console-panel"></div></section>
+        <section id="inputSummaryPanel" class="viz-panel"><div id="inputSummaryContent" class="summary-scroll">No input summary yet.</div></section>
+        <section id="resultSummaryPanel" class="viz-panel"><div id="resultSummaryContent" class="summary-scroll">No result summary yet.</div></section>
+        <section id="mlRunningPanel" class="viz-panel"><div id="mlConsoleContent" class="console-panel"></div></section>
+        <section id="dataPrepPanel" class="viz-panel"><div id="dataPrepContent" class="summary-scroll">No stage1_base_dataset preview yet.</div></section>
+        <section id="mlAnalysePanel" class="viz-panel"><div id="mlPlotsContent" class="plots-grid">No machine learning plots yet.</div></section>
       </div>
     </main>
 
     <aside class="card side-panel right-panel">
-      <div class="panel-title">FORM Panel</div>
-
-      <div class="section-block">
-        <div class="section-title">General settings</div>
-        <div class="field-grid two-col">
-          <div class="field-group">
-            <label class="field-label" for="psiFileStyleSelect">PWP file style</label>
-            <select id="psiFileStyleSelect" class="field-input">
-              <option value="psiz" selected>psiz</option>
-              <option value="soilliq">SoilLiqWaterPress</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="psiUnitSelect">PWP unit</label>
-            <select id="psiUnitSelect" class="field-input">
-              <option value="mm_head" selected>mm head</option>
-              <option value="m_head">m head</option>
-              <option value="pressure_pa">Pa</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="soilThicknessUnitSelect">Soil thickness unit</label>
-            <select id="soilThicknessUnitSelect" class="field-input">
-              <option value="mm" selected>mm</option>
-              <option value="m">m</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="singleTimeCodeInput">Single time code</label>
-            <input id="singleTimeCodeInput" class="field-input" type="text" value="0001" />
-          </div>
-        </div>
-        <label class="checkbox-row"><input id="useMultipleTimestepsInput" type="checkbox" checked /> Use all detected time steps</label>
+      <div class="panel-title">Workflow Panel</div>
+      <div class="tab-row right-tab-row">
+        <button class="right-workflow-tab active" data-right-panel="formPanel" type="button">FORM Panel</button>
+        <button class="right-workflow-tab" data-right-panel="mlPanel" type="button">Machine Learning</button>
       </div>
 
-      <div class="section-block">
-        <div class="section-title bar-title">
-          <span>Soil parameters</span>
-          <div class="inline-tools">
-            <input id="formSoilTypeCount" type="number" min="1" value="3" class="mini-number" />
-            <button id="generateFormInputsBtn" type="button" class="small-btn">Generate</button>
+      <div id="formPanel" class="right-subpanel active">
+        <div class="section-block">
+          <div class="section-title">General settings</div>
+          <div class="field-grid two-col">
+            <div class="field-group"><label class="field-label" for="psiFileStyleSelect">PWP file style</label><select id="psiFileStyleSelect" class="field-input"><option value="psiz" selected>psiz</option><option value="soilliq">SoilLiqWaterPress</option></select></div>
+            <div class="field-group"><label class="field-label" for="psiUnitSelect">PWP unit</label><select id="psiUnitSelect" class="field-input"><option value="mm_head" selected>mm head</option><option value="m_head">m head</option><option value="pressure_pa">Pa</option></select></div>
+            <div class="field-group"><label class="field-label" for="soilThicknessUnitSelect">Soil thickness unit</label><select id="soilThicknessUnitSelect" class="field-input"><option value="mm" selected>mm</option><option value="m">m</option></select></div>
+            <div class="field-group"><label class="field-label" for="singleTimeCodeInput">Single time code</label><input id="singleTimeCodeInput" class="field-input" type="text" value="0001" /></div>
           </div>
+          <label class="checkbox-row"><input id="useMultipleTimestepsInput" type="checkbox" checked /> Use all detected time steps</label>
         </div>
-        <div id="formSoilTypeContainer" class="soil-param-list"></div>
+
+        <div class="section-block">
+          <div class="section-title bar-title"><span>Soil parameters</span><div class="inline-tools"><input id="formSoilTypeCount" type="number" min="1" value="3" class="mini-number" /><button id="generateFormInputsBtn" type="button" class="small-btn">Generate</button></div></div>
+          <div id="formSoilTypeContainer" class="soil-param-list"></div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title bar-title"><span>How many GeoTOP folders to update</span><div class="inline-tools"><input id="geotopRunCountInput" type="number" min="1" value="1" class="mini-number" /><button id="generateGeotopRunsBtn" type="button" class="small-btn">Generate</button></div></div>
+          <div class="field-help">Each GeoTOP folder usually represents one event date. Each box below has its own folder upload, run button, status, and result layer view/download controls.</div>
+          <div id="geotopRunCards" class="geotop-run-list"></div>
+        </div>
       </div>
 
-      <div class="section-block">
-        <div class="section-title bar-title">
-          <span>GeoTOP folders to update</span>
-          <div class="inline-tools">
-            <input id="geotopRunCountInput" type="number" min="1" value="1" class="mini-number" />
-            <button id="generateGeotopRunsBtn" type="button" class="small-btn">Generate</button>
+      <div id="mlPanel" class="right-subpanel">
+        <div class="section-block">
+          <div class="section-title">Upload maps input folder</div>
+          <input id="mlMapsFolderInput" type="file" webkitdirectory directory multiple hidden />
+          <label for="mlMapsFolderInput" class="dropbox required">Upload all base and additional ASC maps folder</label>
+          <div id="mlMapsSummary" class="summary-box">No map folder uploaded yet.</div>
+          <div id="mlMapLayersList" class="layer-control-list"></div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title">Upload FORM outputs folder</div>
+          <input id="mlFormOutputsFolderInput" type="file" webkitdirectory directory multiple hidden />
+          <label for="mlFormOutputsFolderInput" class="dropbox required">Upload FORM output folder containing event subfolders with PoF.asc</label>
+          <div id="mlFormOutputsSummary" class="summary-box">No FORM outputs folder uploaded yet.</div>
+          <div id="mlDetectedEventsBox" class="summary-box small-text">Detected events will appear here for double-check.</div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title">Rainfall events input (E, D, PI)</div>
+          <div class="field-help">Rainfall boxes are generated automatically from uploaded FORM event folders. Default values are filled when the event id matches the values used in your uploaded data-preparation script.</div>
+          <div id="rainfallEventContainer" class="geotop-run-list"></div>
+        </div>
+
+        <div class="section-block">
+          <button id="runDataPrepBtn" type="button" class="primary-btn">Data Preparation for training and evaluate</button>
+          <div id="dataPrepStatus" class="summary-box">Stage 1 base dataset has not been generated yet.</div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title">Machine learning model setup</div>
+          <div class="field-group"><div class="field-label">STAGE1_TEST_EVENTS</div><div id="stage1TestEventsBox" class="checkbox-list-box"></div></div>
+          <div class="field-group"><div class="field-label">STAGE1_VAL_EVENTS</div><div id="stage1ValEventsBox" class="checkbox-list-box"></div></div>
+          <label class="checkbox-row"><input id="stage2EnabledInput" type="checkbox" checked /> Activate Stage 2</label>
+          <div id="stage2ConfigWrap">
+            <div class="field-group"><label class="field-label" for="stage2EventSelect">STAGE2_EVENT</label><select id="stage2EventSelect" class="field-input"></select></div>
+            <div class="upload-card compact-upload">
+              <div class="upload-row-head"><span>landslide_label.asc</span><label><input id="landslideLabelViewToggle" type="checkbox" checked disabled /> View</label></div>
+              <input id="landslideLabelInput" type="file" accept=".asc" hidden />
+              <label for="landslideLabelInput" class="dropbox">Upload landslide_label.asc</label>
+              <div id="landslideLabelSummary" class="file-chip">None</div>
+            </div>
           </div>
         </div>
-        <div class="field-help">Each GeoTOP folder usually represents one date. Create as many GeoTOP boxes as you need. Each box has its own folder upload, run button, status, and result layer controls.</div>
-        <div id="geotopRunCards" class="geotop-run-list"></div>
+
+        <div class="section-block">
+          <div class="section-title">Hyper parameters</div>
+          <div id="mlHyperparametersGrid" class="field-grid two-col"></div>
+        </div>
+
+        <div class="section-block">
+          <button id="runMlBtn" type="button" class="primary-btn">Run Machine Learning</button>
+          <div id="mlRunStatus" class="summary-box">Machine learning has not started yet.</div>
+          <div id="mlResultLayersList" class="layer-control-list"></div>
+        </div>
       </div>
     </aside>
   </div>

@@ -1,193 +1,166 @@
 (function () {
-  const localBackendUrl = 'http://127.0.0.1:8000';
-  const configuredBackendUrl = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL ? String(window.APP_CONFIG.API_BASE_URL).trim() : '');
-  const defaultMapView = { center: [29.72, 119.96], zoom: 10 };
-
-  const rasterConfigs = {
-    dem: { label: 'DEM', input: document.getElementById('demFileInput'), selectedFile: document.getElementById('demSelectedFile'), viewToggle: document.getElementById('demViewToggle') },
-    slope: { label: 'Slope', input: document.getElementById('slopeFileInput'), selectedFile: document.getElementById('slopeSelectedFile'), viewToggle: document.getElementById('slopeViewToggle') },
-    soilType: { label: 'Soil Type', input: document.getElementById('soilTypeFileInput'), selectedFile: document.getElementById('soilTypeSelectedFile'), viewToggle: document.getElementById('soilTypeViewToggle') },
-    soilThickness: { label: 'Soil Thickness', input: document.getElementById('soilThicknessFileInput'), selectedFile: document.getElementById('soilThicknessSelectedFile'), viewToggle: document.getElementById('soilThicknessViewToggle') },
-  };
-
-  const crsSelect = document.getElementById('crsSelect');
-  const uploadStatus = document.getElementById('uploadStatus');
-  const rasterStats = document.getElementById('rasterStats');
-  const formSoilTypeCount = document.getElementById('formSoilTypeCount');
-  const generateFormInputsBtn = document.getElementById('generateFormInputsBtn');
-  const formSoilTypeContainer = document.getElementById('formSoilTypeContainer');
-  const psiFileStyleSelect = document.getElementById('psiFileStyleSelect');
-  const psiUnitSelect = document.getElementById('psiUnitSelect');
-  const soilThicknessUnitSelect = document.getElementById('soilThicknessUnitSelect');
-  const useMultipleTimestepsInput = document.getElementById('useMultipleTimestepsInput');
-  const singleTimeCodeInput = document.getElementById('singleTimeCodeInput');
-  const geotopRunCountInput = document.getElementById('geotopRunCountInput');
-  const generateGeotopRunsBtn = document.getElementById('generateGeotopRunsBtn');
-  const geotopRunCards = document.getElementById('geotopRunCards');
-  const consoleContent = document.getElementById('consoleContent');
-  const inputSummaryContent = document.getElementById('inputSummaryContent');
-  const resultSummaryContent = document.getElementById('resultSummaryContent');
+  const defaultBackend = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'http://127.0.0.1:8000';
   const backendUrlInput = document.getElementById('backendUrlInput');
   const checkBackendBtn = document.getElementById('checkBackendBtn');
   const backendStatus = document.getElementById('backendStatus');
-  const basemapSelect = document.getElementById('basemapSelect');
-  const resetViewBtn = document.getElementById('resetViewBtn');
-  const fitLayerBtn = document.getElementById('fitLayerBtn');
-  const clearLayerBtn = document.getElementById('clearLayerBtn');
-  const mapEmptyNote = document.getElementById('mapEmptyNote');
+  const uploadStatus = document.getElementById('uploadStatus');
+  const rasterStats = document.getElementById('rasterStats');
+  const consoleContent = document.getElementById('consoleContent');
+  const mlConsoleContent = document.getElementById('mlConsoleContent');
+  const inputSummaryContent = document.getElementById('inputSummaryContent');
+  const resultSummaryContent = document.getElementById('resultSummaryContent');
+  const dataPrepContent = document.getElementById('dataPrepContent');
+  const mlPlotsContent = document.getElementById('mlPlotsContent');
+  const dataPrepStatus = document.getElementById('dataPrepStatus');
+  const mlRunStatus = document.getElementById('mlRunStatus');
+  const geotopRunCards = document.getElementById('geotopRunCards');
+  const geotopRunCountInput = document.getElementById('geotopRunCountInput');
+  const generateGeotopRunsBtn = document.getElementById('generateGeotopRunsBtn');
+  const generateFormInputsBtn = document.getElementById('generateFormInputsBtn');
+  const formSoilTypeCount = document.getElementById('formSoilTypeCount');
+  const formSoilTypeContainer = document.getElementById('formSoilTypeContainer');
+  const runDataPrepBtn = document.getElementById('runDataPrepBtn');
+  const runMlBtn = document.getElementById('runMlBtn');
+  const mlMapsFolderInput = document.getElementById('mlMapsFolderInput');
+  const mlMapsSummary = document.getElementById('mlMapsSummary');
+  const mlMapLayersList = document.getElementById('mlMapLayersList');
+  const mlFormOutputsFolderInput = document.getElementById('mlFormOutputsFolderInput');
+  const mlFormOutputsSummary = document.getElementById('mlFormOutputsSummary');
+  const mlDetectedEventsBox = document.getElementById('mlDetectedEventsBox');
+  const rainfallEventContainer = document.getElementById('rainfallEventContainer');
+  const stage1TestEventsBox = document.getElementById('stage1TestEventsBox');
+  const stage1ValEventsBox = document.getElementById('stage1ValEventsBox');
+  const stage2EnabledInput = document.getElementById('stage2EnabledInput');
+  const stage2ConfigWrap = document.getElementById('stage2ConfigWrap');
+  const stage2EventSelect = document.getElementById('stage2EventSelect');
+  const landslideLabelInput = document.getElementById('landslideLabelInput');
+  const landslideLabelSummary = document.getElementById('landslideLabelSummary');
+  const landslideLabelViewToggle = document.getElementById('landslideLabelViewToggle');
+  const mlHyperparametersGrid = document.getElementById('mlHyperparametersGrid');
+  const mlResultLayersList = document.getElementById('mlResultLayersList');
+  const psiFileStyleSelect = document.getElementById('psiFileStyleSelect');
+  const psiUnitSelect = document.getElementById('psiUnitSelect');
+  const soilThicknessUnitSelect = document.getElementById('soilThicknessUnitSelect');
+  const singleTimeCodeInput = document.getElementById('singleTimeCodeInput');
+  const useMultipleTimestepsInput = document.getElementById('useMultipleTimestepsInput');
   const colorbarPanel = document.getElementById('colorbarPanel');
-  const colorbarMin = document.getElementById('colorbarMin');
-  const colorbarMid = document.getElementById('colorbarMid');
   const colorbarMax = document.getElementById('colorbarMax');
+  const colorbarMid = document.getElementById('colorbarMid');
+  const colorbarMin = document.getElementById('colorbarMin');
+  const mapEmptyNote = document.getElementById('mapEmptyNote');
+  const crsSelect = document.getElementById('crsSelect');
+  const basemapSelect = document.getElementById('basemapSelect');
 
-  const state = {
-    map: null,
-    currentBaseLayer: null,
-    rasterLayers: {},
-    activeLayerKey: null,
-    uploadedFiles: { dem: null, slope: null, soilType: null, soilThickness: null },
-    geotopRuns: [],
-    activeConsoleRunId: null,
+  const rasterConfigs = {
+    dem: { label: 'DEM', input: document.getElementById('demFileInput'), selectedFile: document.getElementById('demSelectedFile'), viewToggle: document.getElementById('demViewToggle') },
+    slope: { label: 'Slope map', input: document.getElementById('slopeFileInput'), selectedFile: document.getElementById('slopeSelectedFile'), viewToggle: document.getElementById('slopeViewToggle') },
+    soilType: { label: 'Soil type map', input: document.getElementById('soilTypeFileInput'), selectedFile: document.getElementById('soilTypeSelectedFile'), viewToggle: document.getElementById('soilTypeViewToggle') },
+    soilThickness: { label: 'Soil thickness map', input: document.getElementById('soilThicknessFileInput'), selectedFile: document.getElementById('soilThicknessSelectedFile'), viewToggle: document.getElementById('soilThicknessViewToggle') }
   };
 
+  const defaultSoils = [
+    { soil_id: 1, name: 'Qg', phi_deg: 40.50, phi_cov: 0.02, c_kpa: 1.72, c_cov: 0.69, gamma_s: 16.87, rho_c_phi: -0.5 },
+    { soil_id: 2, name: 'Hs', phi_deg: 41.40, phi_cov: 0.08, c_kpa: 2.48, c_cov: 0.51, gamma_s: 16.48, rho_c_phi: -0.5 },
+    { soil_id: 3, name: 'Hi', phi_deg: 37.61, phi_cov: 0.08, c_kpa: 4.82, c_cov: 0.29, gamma_s: 15.50, rho_c_phi: -0.5 }
+  ];
+
+  const defaultHyperparameters = [
+    ['batch_size_stage1', 8192], ['batch_size_stage2', 4096], ['epochs_stage1', 80], ['epochs_stage2', 100],
+    ['lr_stage1', 1e-3], ['lr_stage2', 1e-3], ['weight_decay', 1e-5], ['patience_stage1', 10], ['patience_stage2', 15],
+    ['min_delta', 1e-5], ['stage2_train_frac', 0.60], ['stage2_val_frac', 0.20], ['stage2_test_frac', 0.20], ['class_threshold', 0.5], ['random_seed', 42]
+  ];
+
+  const state = {
+    backendUrl: localStorage.getItem('landslide_backend_url') || defaultBackend,
+    rainfallDefaults: {},
+    formInputs: { dem: null, slope: null, soilType: null, soilThickness: null },
+    geotopCards: [],
+    ml: {
+      mapFiles: [],
+      formOutputFiles: [],
+      detectedEvents: [],
+      rainfall: {},
+      prepJobId: null,
+      mlJobId: null,
+      labelFile: null
+    }
+  };
+
+  let map = null;
+  let currentBaseLayer = null;
+  let activeLayerKey = null;
+  const rasterLayers = {};
+  const defaultMapView = { center: [29.72, 119.96], zoom: 10 };
   const baseLayerConfigs = {
     osm: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', options: { attribution: '© OpenStreetMap contributors' } },
     terrain: { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', options: { attribution: '© OpenTopoMap contributors' } },
-    voyager: { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', options: { attribution: '© OpenStreetMap contributors, © CARTO' } },
-    satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', options: { attribution: 'Tiles © Esri' } },
+    voyager: { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', options: { attribution: '© CARTO' } },
+    satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', options: { attribution: '© Esri' } }
   };
 
-  if (typeof proj4 !== 'undefined') {
-    proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs +type=crs');
-    proj4.defs('EPSG:4490', '+proj=longlat +ellps=GRS80 +no_defs +type=crs');
-    proj4.defs('EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs +type=crs');
-    proj4.defs('EPSG:4549', '+proj=tmerc +lat_0=0 +lon_0=120 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs +type=crs');
-  }
-
-  function isLocalHost(hostname) {
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
-  }
-
-  function initialBackendUrl() {
-    const saved = (localStorage.getItem('landslide_backend_url') || '').trim();
-    if (saved) return saved;
-    if (configuredBackendUrl) return configuredBackendUrl.replace(/\/$/, '');
-    if (isLocalHost(window.location.hostname)) return localBackendUrl;
-    return '';
-  }
-
-  function backendUrl() {
-    return (backendUrlInput.value || '').trim().replace(/\/$/, '');
-  }
-
-  function addConsoleLine(type, message) {
+  function apiBase() { return String(backendUrlInput.value || '').replace(/\/$/, ''); }
+  function addConsoleLine(target, type, message) {
     const line = document.createElement('div');
-    line.className = 'log-line ' + (type || 'info');
+    line.style.marginBottom = '6px';
+    line.style.color = type === 'err' ? '#ff6b6b' : type === 'warn' ? '#ffd166' : '#8affc1';
     line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-    consoleContent.appendChild(line);
-    consoleContent.scrollTop = consoleContent.scrollHeight;
+    target.appendChild(line);
+    target.scrollTop = target.scrollHeight;
   }
-
-  function renderConsoleForRun(runId) {
-    const run = state.geotopRuns.find(item => item.id === runId);
-    state.activeConsoleRunId = runId;
-    consoleContent.innerHTML = '';
-    if (!run) {
-      addConsoleLine('warn', 'No selected GeoTOP run card');
-      return;
-    }
-    (run.logs || []).forEach(entry => {
-      const lower = String(entry).toLowerCase();
-      const type = lower.includes('error') ? 'err' : lower.includes('warn') ? 'warn' : 'info';
-      const line = document.createElement('div');
-      line.className = 'log-line ' + type;
-      line.textContent = entry;
-      consoleContent.appendChild(line);
-    });
-    if (!run.logs.length) addConsoleLine('info', `GeoTOP folder ${run.label} has no logs yet.`);
-    consoleContent.scrollTop = consoleContent.scrollHeight;
-    document.querySelectorAll('.geotop-run-card').forEach(card => {
-      card.classList.toggle('active-run-card', Number(card.dataset.runId) === runId);
-    });
-  }
-
-  function setStatus(message) {
-    uploadStatus.textContent = message;
-  }
-
-  function initializeBackendInput() {
-    const initial = initialBackendUrl();
-    backendUrlInput.value = initial;
-    if (initial) {
-      backendStatus.textContent = 'Ready to check';
-      backendStatus.className = '';
-    } else {
-      backendStatus.textContent = 'Set backend URL';
-      backendStatus.className = 'bad';
-      addConsoleLine('warn', 'No backend URL configured yet. Set config.js or paste your deployed backend URL.');
-    }
-  }
+  function setStatus(el, text) { if (el) el.textContent = text; }
+  function setBackendStatus(text, className) { backendStatus.textContent = text; backendStatus.className = className || ''; }
 
   async function checkBackend() {
-    const url = backendUrl();
-    if (!url) {
-      backendStatus.textContent = 'Set backend URL';
-      backendStatus.className = 'bad';
-      addConsoleLine('warn', 'Backend URL is empty. For online deployment, use your Render/Railway/VPS HTTPS URL.');
-      return;
-    }
-    backendStatus.textContent = 'Checking...';
-    backendStatus.className = '';
+    const url = apiBase();
+    if (!url) { setBackendStatus('Empty URL'); return false; }
+    setBackendStatus('Checking...');
     try {
-      const res = await fetch(`${url}/api/health`, { method: 'GET', mode: 'cors' });
-      if (!res.ok) throw new Error(`Health check failed (${res.status})`);
+      const res = await fetch(`${url}/api/health`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      backendStatus.textContent = `Connected (${data.status})`;
-      backendStatus.className = 'ok';
+      setBackendStatus('Reachable');
       localStorage.setItem('landslide_backend_url', url);
-      addConsoleLine('info', `Backend connected: ${url}`);
+      state.backendUrl = url;
+      state.rainfallDefaults = (await fetch(`${url}/api/rainfall-defaults`).then(r => r.json()).catch(() => ({ defaults: {} }))).defaults || {};
+      addConsoleLine(consoleContent, 'info', `Backend reachable at ${url}`);
+      return true;
     } catch (err) {
-      backendStatus.textContent = 'Not reachable';
-      backendStatus.className = 'bad';
-      addConsoleLine('err', `Backend not reachable: ${err.message}`);
-      if (window.location.protocol === 'https:' && url.startsWith('http://')) {
-        addConsoleLine('err', 'Your frontend is HTTPS but the backend URL is HTTP. Browsers block this as mixed content. Use an HTTPS backend URL.');
-      }
+      setBackendStatus('Not reachable');
+      addConsoleLine(consoleContent, 'err', `Backend check failed: ${err.message}`);
+      return false;
     }
   }
 
-  function initMap() {
-    state.map = L.map('map', { center: defaultMapView.center, zoom: defaultMapView.zoom, zoomControl: true });
-    setBaseLayer('osm');
+  function activateVizPanel(id) {
+    document.querySelectorAll('.viz-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.viz === id));
+    document.querySelectorAll('.viz-panel').forEach(panel => panel.classList.toggle('active', panel.id === id));
+  }
+  function activateRightPanel(id) {
+    document.querySelectorAll('.right-workflow-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.rightPanel === id));
+    document.querySelectorAll('.right-subpanel').forEach(panel => panel.classList.toggle('active', panel.id === id));
   }
 
   function setBaseLayer(key) {
-    if (!state.map || !baseLayerConfigs[key]) return;
-    if (state.currentBaseLayer) state.map.removeLayer(state.currentBaseLayer);
+    if (!map || !baseLayerConfigs[key]) return;
+    if (currentBaseLayer && map.hasLayer(currentBaseLayer)) map.removeLayer(currentBaseLayer);
     const cfg = baseLayerConfigs[key];
-    state.currentBaseLayer = L.tileLayer(cfg.url, cfg.options).addTo(state.map);
+    currentBaseLayer = L.tileLayer(cfg.url, cfg.options).addTo(map);
   }
 
-  function resetMapView() {
-    if (state.map) state.map.setView(defaultMapView.center, defaultMapView.zoom);
+  function initMap() {
+    map = L.map('map', { center: defaultMapView.center, zoom: defaultMapView.zoom, zoomControl: true });
+    setBaseLayer('osm');
   }
 
-  function clearAllLayers() {
-    Object.keys(state.rasterLayers).forEach(key => {
-      const item = state.rasterLayers[key];
-      if (item.layer && state.map.hasLayer(item.layer)) state.map.removeLayer(item.layer);
-      if (item.viewToggleEl) item.viewToggleEl.checked = false;
-      item.visible = false;
-    });
-    state.activeLayerKey = null;
-    mapEmptyNote.style.display = 'block';
-    rasterStats.textContent = 'No active layer';
-    colorbarPanel.style.display = 'none';
+  function updateColorbar(min, max) {
+    colorbarPanel.style.display = 'block';
+    colorbarMax.textContent = max.toFixed(2);
+    colorbarMid.textContent = ((min + max) / 2).toFixed(2);
+    colorbarMin.textContent = min.toFixed(2);
   }
-
-  function fitActiveLayer() {
-    const item = state.rasterLayers[state.activeLayerKey];
-    if (item && item.bounds) state.map.fitBounds(item.bounds, { padding: [20, 20] });
+  function clearColorbar() { colorbarPanel.style.display = 'none'; }
+  function updateRasterStats(min, max, width, height, label) {
+    rasterStats.textContent = `Layer: ${label}\nMin: ${min.toFixed(2)}\nMax: ${max.toFixed(2)}\nSize: ${width} × ${height}`;
   }
 
   function parseAsc(text) {
@@ -198,587 +171,545 @@
       const parts = lines[i].trim().split(/\s+/);
       if (parts.length >= 2) {
         const key = parts[0].toLowerCase();
-        if (['ncols', 'nrows', 'xllcorner', 'yllcorner', 'xllcenter', 'yllcenter', 'cellsize', 'nodata_value'].includes(key)) {
+        if (['ncols','nrows','xllcorner','yllcorner','xllcenter','yllcenter','cellsize','nodata_value'].includes(key)) {
           header[key] = parseFloat(parts[1]);
           dataStart = i + 1;
         }
       }
     }
-    const width = parseInt(header.ncols, 10);
-    const height = parseInt(header.nrows, 10);
-    if (!width || !height) throw new Error('Invalid ASC header');
-    const nodata = header.nodata_value;
+    const ncols = parseInt(header.ncols, 10); const nrows = parseInt(header.nrows, 10); const nodata = header.nodata_value;
+    if (!ncols || !nrows) throw new Error('Invalid ASC header');
     const values = [];
-    for (let r = dataStart; r < lines.length; r++) {
-      const row = lines[r].trim();
-      if (!row) continue;
-      row.split(/\s+/).forEach(part => {
-        const value = parseFloat(part);
-        if (Number.isFinite(value)) values.push(value);
-      });
+    for (let i = dataStart; i < lines.length; i++) {
+      const row = lines[i].trim(); if (!row) continue;
+      row.split(/\s+/).forEach(v => { const num = parseFloat(v); if (Number.isFinite(num)) values.push(num); });
     }
-    const grid = new Float32Array(values.slice(0, width * height));
-    let min = Infinity;
-    let max = -Infinity;
-    for (let i = 0; i < grid.length; i++) {
-      const val = grid[i];
-      if (!Number.isFinite(val) || (typeof nodata !== 'undefined' && val === nodata)) {
-        grid[i] = NaN;
-      } else {
-        if (val < min) min = val;
-        if (val > max) max = val;
-      }
-    }
-    return {
-      width,
-      height,
-      grid,
-      min,
-      max,
-      xll: header.xllcorner ?? header.xllcenter ?? 0,
-      yll: header.yllcorner ?? header.yllcenter ?? 0,
-      cellsize: header.cellsize ?? 1,
-    };
+    const sliced = values.slice(0, ncols * nrows);
+    const grid = new Float32Array(sliced.length);
+    let min = Infinity; let max = -Infinity;
+    sliced.forEach((val, i) => {
+      if (!Number.isFinite(val) || (Number.isFinite(nodata) && val === nodata)) grid[i] = NaN;
+      else { grid[i] = val; min = Math.min(min, val); max = Math.max(max, val); }
+    });
+    return { width: ncols, height: nrows, grid, min, max, xll: header.xllcorner ?? header.xllcenter ?? 0, yll: header.yllcorner ?? header.yllcenter ?? 0, cellsize: header.cellsize ?? 1 };
   }
 
   function renderGridToCanvas(width, height, grid, min, max) {
     const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.createImageData(width, height);
-    const data = imageData.data;
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d'); const imageData = ctx.createImageData(width, height);
     for (let i = 0; i < grid.length; i++) {
-      const idx = i * 4;
-      const val = grid[i];
-      if (!Number.isFinite(val)) {
-        data[idx + 3] = 0;
-      } else {
-        const norm = Math.max(0, Math.min(1, (val - min) / ((max - min) || 1)));
-        data[idx] = Math.round(255 * norm);
-        data[idx + 1] = Math.round(180 * (1 - Math.abs(norm - 0.5) * 2));
-        data[idx + 2] = Math.round(255 * (1 - norm));
-        data[idx + 3] = 220;
-      }
+      const idx = i * 4; const val = grid[i];
+      if (!Number.isFinite(val)) { imageData.data[idx+3] = 0; continue; }
+      const norm = Math.max(0, Math.min(1, (val - min) / ((max - min) || 1)));
+      imageData.data[idx] = Math.round(255 * norm);
+      imageData.data[idx+1] = Math.round(180 * (1 - Math.abs(norm - 0.5) * 2));
+      imageData.data[idx+2] = Math.round(255 * (1 - norm));
+      imageData.data[idx+3] = 220;
     }
     ctx.putImageData(imageData, 0, 0);
     return canvas;
   }
 
   function ascLooksGeographic(asc) {
-    const west = asc.xll;
-    const south = asc.yll;
-    const east = asc.xll + asc.width * asc.cellsize;
-    const north = asc.yll + asc.height * asc.cellsize;
+    const west = asc.xll; const south = asc.yll; const east = asc.xll + asc.width * asc.cellsize; const north = asc.yll + asc.height * asc.cellsize;
     return west >= -180 && west <= 180 && east >= -180 && east <= 180 && south >= -90 && south <= 90 && north >= -90 && north <= 90;
   }
-
   function transformPointToWGS84(x, y, sourceCRS) {
     if (sourceCRS === 'EPSG:4326' || sourceCRS === 'EPSG:4490') return [x, y];
     return proj4(sourceCRS, 'EPSG:4326', [x, y]);
   }
-
   function ascBoundsToLatLngBounds(asc, selectedCRS) {
-    const xMin = asc.xll;
-    const yMin = asc.yll;
-    const xMax = asc.xll + asc.width * asc.cellsize;
-    const yMax = asc.yll + asc.height * asc.cellsize;
-    if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) {
-      return [[yMin, xMin], [yMax, xMax]];
-    }
-    const ll = transformPointToWGS84(xMin, yMin, selectedCRS);
-    const ur = transformPointToWGS84(xMax, yMax, selectedCRS);
+    const xMin = asc.xll, yMin = asc.yll, xMax = asc.xll + asc.width * asc.cellsize, yMax = asc.yll + asc.height * asc.cellsize;
+    if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) return [[yMin, xMin], [yMax, xMax]];
+    const ll = transformPointToWGS84(xMin, yMin, selectedCRS); const ur = transformPointToWGS84(xMax, yMax, selectedCRS);
     return [[ll[1], ll[0]], [ur[1], ur[0]]];
   }
 
-  function updateColorbar(min, max) {
-    colorbarMax.textContent = max.toFixed(2);
-    colorbarMid.textContent = ((min + max) / 2).toFixed(2);
-    colorbarMin.textContent = min.toFixed(2);
-    colorbarPanel.style.display = 'block';
-  }
-
-  function updateActiveLayerStats(item) {
-    if (!item) {
-      rasterStats.textContent = 'No active layer';
-      colorbarPanel.style.display = 'none';
-      return;
-    }
-    rasterStats.innerHTML = `Layer: ${item.label}<br>Min: ${item.min.toFixed(3)}<br>Max: ${item.max.toFixed(3)}<br>Size: ${item.width} × ${item.height}<br>CRS: ${item.crsText}`;
-    updateColorbar(item.min, item.max);
+  function registerLayer(layerKey, layerLabel, leafletLayer, bounds, stats, onVisibleChange) {
+    if (rasterLayers[layerKey] && rasterLayers[layerKey].layer && map.hasLayer(rasterLayers[layerKey].layer)) map.removeLayer(rasterLayers[layerKey].layer);
+    rasterLayers[layerKey] = { key: layerKey, label: layerLabel, layer: leafletLayer, bounds, min: stats.min, max: stats.max, width: stats.width, height: stats.height, visible: true, onVisibleChange };
+    activeLayerKey = layerKey;
+    map.fitBounds(bounds, { padding: [20,20] });
     mapEmptyNote.style.display = 'none';
+    updateRasterStats(stats.min, stats.max, stats.width, stats.height, layerLabel);
+    updateColorbar(stats.min, stats.max);
   }
 
-  function registerRasterLayer(layerKey, label, fileName, leafletLayer, bounds, stats, viewToggleEl) {
-    if (state.rasterLayers[layerKey] && state.map.hasLayer(state.rasterLayers[layerKey].layer)) {
-      state.map.removeLayer(state.rasterLayers[layerKey].layer);
-    }
-    state.rasterLayers[layerKey] = {
-      key: layerKey,
-      label,
-      fileName,
-      layer: leafletLayer,
-      bounds,
-      visible: true,
-      min: stats.min,
-      max: stats.max,
-      width: stats.width,
-      height: stats.height,
-      crsText: stats.crsText,
-      viewToggleEl,
-    };
-    if (viewToggleEl) {
-      viewToggleEl.disabled = false;
-      viewToggleEl.checked = true;
-    }
-    state.activeLayerKey = layerKey;
-    updateActiveLayerStats(state.rasterLayers[layerKey]);
-  }
-
-  function addAscLayer(asc, fileName, layerKey, layerLabel, viewToggleEl) {
+  function addAscLayerFromParsed(asc, fileName, layerKey, layerLabel) {
     const canvas = renderGridToCanvas(asc.width, asc.height, asc.grid, asc.min, asc.max);
-    const url = canvas.toDataURL('image/png');
-    const selectedCRS = crsSelect.value || 'auto';
-    const bounds = ascBoundsToLatLngBounds(asc, selectedCRS);
-    const crsText = selectedCRS === 'auto' ? (ascLooksGeographic(asc) ? 'Auto → EPSG:4326' : 'Auto/projected') : selectedCRS;
-    const leafletLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(state.map);
-    state.map.fitBounds(bounds, { padding: [20, 20] });
-    registerRasterLayer(layerKey, layerLabel, fileName, leafletLayer, bounds, {
-      min: asc.min, max: asc.max, width: asc.width, height: asc.height, crsText,
-    }, viewToggleEl);
-    setStatus(`Loaded ${fileName}`);
+    const bounds = ascBoundsToLatLngBounds(asc, crsSelect.value || 'auto');
+    const overlay = L.imageOverlay(canvas.toDataURL('image/png'), bounds, { opacity: 0.9 }).addTo(map);
+    registerLayer(layerKey, layerLabel, overlay, bounds, { min: asc.min, max: asc.max, width: asc.width, height: asc.height });
+    uploadStatus.textContent = `Loaded ${fileName}`;
+    return overlay;
   }
 
-  async function handleRasterFile(file, layerKey, layerLabel, viewToggleEl) {
-    const ext = file.name.split('.').pop().toLowerCase();
-    if (ext === 'asc') {
-      const text = await file.text();
-      const asc = parseAsc(text);
-      addAscLayer(asc, file.name, layerKey, layerLabel, viewToggleEl);
-    } else if (ext === 'tif' || ext === 'tiff') {
-      throw new Error('TIFF preview is not enabled in this FORM build. Please use ASC for required FORM inputs.');
-    } else {
-      throw new Error(`Unsupported file type: ${ext}`);
-    }
+  async function displayAscFile(file, layerKey, layerLabel) {
+    const text = await file.text();
+    const asc = parseAsc(text);
+    addAscLayerFromParsed(asc, file.name, layerKey, layerLabel);
   }
 
-  function generateFormInputs() {
+  async function displayAscUrl(url, layerKey, layerLabel) {
+    const text = await fetch(url).then(r => r.text());
+    const asc = parseAsc(text);
+    addAscLayerFromParsed(asc, url.split('/').pop(), layerKey, layerLabel);
+  }
+
+  function clearAllLayers() {
+    Object.keys(rasterLayers).forEach(key => { if (rasterLayers[key].layer && map.hasLayer(rasterLayers[key].layer)) map.removeLayer(rasterLayers[key].layer); delete rasterLayers[key]; });
+    activeLayerKey = null; mapEmptyNote.style.display = 'block'; clearColorbar(); rasterStats.textContent = 'No active layer';
+  }
+
+  function updateInputSummary() {
+    const summary = [];
+    ['dem','slope','soilType','soilThickness'].forEach(key => { if (state.formInputs[key]) summary.push(`${key}: ${state.formInputs[key].name}`); });
+    summary.push(`FORM GeoTOP boxes: ${state.geotopCards.length}`);
+    if (state.ml.mapFiles.length) summary.push(`ML maps uploaded: ${state.ml.mapFiles.length}`);
+    if (state.ml.formOutputFiles.length) summary.push(`ML FORM files uploaded: ${state.ml.formOutputFiles.length}`);
+    inputSummaryContent.textContent = summary.join('\n') || 'No input summary yet.';
+  }
+
+  function updateResultSummary(text) {
+    resultSummaryContent.textContent = text;
+  }
+
+  function createSoilInputs() {
     const count = Math.max(1, parseInt(formSoilTypeCount.value || '3', 10));
-    const defaults = [
-      { soil_id: 1, name: 'Qg', phi_deg: 40.50, phi_cov: 0.02, c_kpa: 1.72, c_cov: 0.69, gamma_s: 16.87, rho_c_phi: -0.5 },
-      { soil_id: 2, name: 'Hs', phi_deg: 41.40, phi_cov: 0.08, c_kpa: 2.48, c_cov: 0.51, gamma_s: 16.48, rho_c_phi: -0.5 },
-      { soil_id: 3, name: 'Hi', phi_deg: 37.61, phi_cov: 0.08, c_kpa: 4.82, c_cov: 0.29, gamma_s: 15.50, rho_c_phi: -0.5 },
-    ];
     formSoilTypeContainer.innerHTML = '';
-    for (let i = 1; i <= count; i++) {
-      const base = defaults[i - 1] || { soil_id: i, name: `Soil ${i}`, phi_deg: 35, phi_cov: 0.05, c_kpa: 5, c_cov: 0.3, gamma_s: 18, rho_c_phi: -0.5 };
-      const card = document.createElement('div');
-      card.className = 'soil-param-card';
+    for (let i = 0; i < count; i++) {
+      const soil = defaultSoils[i] || { soil_id: i + 1, name: `Soil ${i+1}`, phi_deg: 35, phi_cov: 0.1, c_kpa: 2, c_cov: 0.5, gamma_s: 16, rho_c_phi: -0.5 };
+      const card = document.createElement('div'); card.className = 'geotop-card';
       card.innerHTML = `
-        <div class="soil-param-title">Soil type ${i}</div>
-        <div class="soil-param-grid">
-          <div><label class="field-label">soil_id</label><input class="field-input" id="soil_id_${i}" type="number" value="${base.soil_id}" /></div>
-          <div><label class="field-label">name</label><input class="field-input" id="soil_name_${i}" type="text" value="${base.name}" /></div>
-          <div><label class="field-label">phi_deg</label><input class="field-input" id="phi_deg_${i}" type="number" step="any" value="${base.phi_deg}" /></div>
-          <div><label class="field-label">phi_cov</label><input class="field-input" id="phi_cov_${i}" type="number" step="any" value="${base.phi_cov}" /></div>
-          <div><label class="field-label">c_kpa</label><input class="field-input" id="c_kpa_${i}" type="number" step="any" value="${base.c_kpa}" /></div>
-          <div><label class="field-label">c_cov</label><input class="field-input" id="c_cov_${i}" type="number" step="any" value="${base.c_cov}" /></div>
-          <div><label class="field-label">gamma_s</label><input class="field-input" id="gamma_s_${i}" type="number" step="any" value="${base.gamma_s}" /></div>
-          <div><label class="field-label">rho_c_phi</label><input class="field-input" id="rho_c_phi_${i}" type="number" step="any" value="${base.rho_c_phi}" /></div>
-        </div>
-      `;
+        <div class="geotop-title">Soil ${i+1}</div>
+        <div class="field-grid two-col">
+          <div class="field-group"><label class="field-label">soil_id</label><input data-field="soil_id" type="number" class="field-input" value="${soil.soil_id}" /></div>
+          <div class="field-group"><label class="field-label">name</label><input data-field="name" type="text" class="field-input" value="${soil.name}" /></div>
+          <div class="field-group"><label class="field-label">phi_deg</label><input data-field="phi_deg" type="number" step="0.01" class="field-input" value="${soil.phi_deg}" /></div>
+          <div class="field-group"><label class="field-label">phi_cov</label><input data-field="phi_cov" type="number" step="0.01" class="field-input" value="${soil.phi_cov}" /></div>
+          <div class="field-group"><label class="field-label">c_kpa</label><input data-field="c_kpa" type="number" step="0.01" class="field-input" value="${soil.c_kpa}" /></div>
+          <div class="field-group"><label class="field-label">c_cov</label><input data-field="c_cov" type="number" step="0.01" class="field-input" value="${soil.c_cov}" /></div>
+          <div class="field-group"><label class="field-label">gamma_s</label><input data-field="gamma_s" type="number" step="0.01" class="field-input" value="${soil.gamma_s}" /></div>
+          <div class="field-group"><label class="field-label">rho_c_phi</label><input data-field="rho_c_phi" type="number" step="0.01" class="field-input" value="${soil.rho_c_phi}" /></div>
+        </div>`;
       formSoilTypeContainer.appendChild(card);
     }
   }
 
   function collectSoilParams() {
-    const count = parseInt(formSoilTypeCount.value, 10);
-    const soilParams = [];
-    for (let i = 1; i <= count; i++) {
-      soilParams.push({
-        soil_id: Number(document.getElementById(`soil_id_${i}`).value),
-        name: document.getElementById(`soil_name_${i}`).value,
-        phi_deg: Number(document.getElementById(`phi_deg_${i}`).value),
-        phi_cov: Number(document.getElementById(`phi_cov_${i}`).value),
-        c_kpa: Number(document.getElementById(`c_kpa_${i}`).value),
-        c_cov: Number(document.getElementById(`c_cov_${i}`).value),
-        gamma_s: Number(document.getElementById(`gamma_s_${i}`).value),
-        rho_c_phi: Number(document.getElementById(`rho_c_phi_${i}`).value),
+    return Array.from(formSoilTypeContainer.children).map(card => {
+      const payload = {};
+      card.querySelectorAll('[data-field]').forEach(input => {
+        payload[input.dataset.field] = input.type === 'text' ? input.value : parseFloat(input.value);
       });
-    }
-    return soilParams;
-  }
-
-  function detectTimeCodes(files) {
-    const pattern = psiFileStyleSelect.value === 'psiz' ? /^psizL0000N(\d+)\.asc$/i : /^SoilLiqWaterPressL0000N(\d+)\.asc$/i;
-    const codes = new Set();
-    files.forEach(file => {
-      const match = file.name.match(pattern);
-      if (match) codes.add(match[1]);
+      return payload;
     });
-    return Array.from(codes).sort((a, b) => Number(a) - Number(b));
   }
 
-  function getRunById(runId) {
-    return state.geotopRuns.find(item => item.id === runId);
+  function setCardStatus(card, statusText, cls) {
+    card.statusEl.textContent = statusText; card.statusEl.className = `status-pill ${cls}`;
   }
 
-  function summarizeRunFiles(run) {
-    const codes = detectTimeCodes(run.pwpFiles);
-    const preview = run.pwpFiles.slice(0, 12).map(f => f.webkitRelativePath || f.name).join('\n');
-    run.folderSummaryEl.innerHTML = `Files: ${run.pwpFiles.length}<br>Detected time codes: ${codes.length ? codes.join(', ') : 'None detected yet'}`;
-    run.fileListEl.textContent = preview || 'No files in selection';
+  function createGeotopCard(index) {
+    const card = document.createElement('div'); card.className = 'geotop-card';
+    card.innerHTML = `
+      <div class="geotop-header"><div class="geotop-title">GeoTOP folder ${index + 1}</div><div class="status-pill waiting">Waiting</div></div>
+      <div class="field-group"><label class="field-label">Optional event label</label><input class="field-input event-label-input" type="text" placeholder="For example 20210610" /></div>
+      <input type="file" class="pwp-folder-input" webkitdirectory directory multiple hidden />
+      <button type="button" class="small-btn choose-folder-btn">Choose GeoTOP PWP folder</button>
+      <div class="summary-box folder-summary">No folder uploaded yet.</div>
+      <div class="toolbar-row buttons" style="margin-top:8px;"><button type="button" class="primary-btn run-btn">Run</button><button type="button" class="small-btn show-logs-btn">Show logs</button></div>
+      <div class="layer-control-list result-layers"></div>
+    `;
+    const obj = { el: card, statusEl: card.querySelector('.status-pill'), input: card.querySelector('.pwp-folder-input'), chooseBtn: card.querySelector('.choose-folder-btn'), runBtn: card.querySelector('.run-btn'), showLogsBtn: card.querySelector('.show-logs-btn'), folderSummary: card.querySelector('.folder-summary'), resultLayers: card.querySelector('.result-layers'), labelInput: card.querySelector('.event-label-input'), pwpFiles: [], jobId: null };
+    obj.chooseBtn.addEventListener('click', () => obj.input.click());
+    obj.input.addEventListener('change', () => {
+      obj.pwpFiles = Array.from(obj.input.files || []);
+      const detectedTimeCodes = [...new Set(obj.pwpFiles.map(f => {
+        const m = f.name.match(/N(\d+)\.asc$/i); return m ? m[1] : null;
+      }).filter(Boolean))].sort();
+      obj.folderSummary.textContent = `${obj.pwpFiles.length} files uploaded${detectedTimeCodes.length ? ` | time codes: ${detectedTimeCodes.join(', ')}` : ''}`;
+      setCardStatus(obj, 'Ready', 'waiting');
+      updateInputSummary();
+    });
+    obj.showLogsBtn.addEventListener('click', () => activateVizPanel('formRunningPanel'));
+    obj.runBtn.addEventListener('click', () => runFormCard(obj));
+    return obj;
   }
 
-  function generateGeotopRunCards() {
-    const count = Math.max(1, parseInt(geotopRunCountInput.value || '1', 10));
-    const previous = new Map(state.geotopRuns.map(run => [run.id, run]));
+  function createGeotopCards() {
     geotopRunCards.innerHTML = '';
-    state.geotopRuns = [];
-    for (let i = 1; i <= count; i++) {
-      const preserved = previous.get(i);
-      const card = document.createElement('div');
-      card.className = 'geotop-run-card';
-      card.dataset.runId = String(i);
-      card.innerHTML = `
-        <div class="geotop-run-head">
-          <div>
-            <div class="result-layer-name">GeoTOP folder ${i}</div>
-            <div class="result-layer-subtitle">Upload one PWP folder for one date / scenario</div>
-          </div>
-          <button type="button" class="small-btn geotop-log-btn">Show logs</button>
-        </div>
-        <input id="pwpFolderInput_${i}" type="file" webkitdirectory directory multiple hidden />
-        <label for="pwpFolderInput_${i}" class="dropbox required">Select GeoTOP PWP folder ${i}</label>
-        <div class="summary-box geotop-folder-summary">No folder selected</div>
-        <div class="list-box geotop-file-list"></div>
-        <div class="geotop-run-actions">
-          <button type="button" class="primary-btn geotop-run-btn">Run GeoTOP folder ${i}</button>
-        </div>
-        <div class="summary-box geotop-run-status">Ready</div>
-        <div class="result-layers geotop-result-layers">No FORM outputs yet.</div>
-      `;
-      geotopRunCards.appendChild(card);
-      const run = {
-        id: i,
-        label: String(i),
-        pwpFiles: preserved ? preserved.pwpFiles : [],
-        folderInputEl: card.querySelector(`#pwpFolderInput_${i}`),
-        folderSummaryEl: card.querySelector('.geotop-folder-summary'),
-        fileListEl: card.querySelector('.geotop-file-list'),
-        runBtnEl: card.querySelector('.geotop-run-btn'),
-        logBtnEl: card.querySelector('.geotop-log-btn'),
-        runStatusEl: card.querySelector('.geotop-run-status'),
-        resultLayerControlsEl: card.querySelector('.geotop-result-layers'),
-        logs: preserved ? preserved.logs : [],
-        jobId: preserved ? preserved.jobId : null,
-        pollHandle: preserved ? preserved.pollHandle : null,
-        resultFiles: preserved ? preserved.resultFiles : {},
-      };
-      run.folderInputEl.addEventListener('change', e => {
-        run.pwpFiles = Array.from(e.target.files || []).filter(file => file.name.toLowerCase().endsWith('.asc'));
-        summarizeRunFiles(run);
-        buildInputSummary();
-        setStatus(`Loaded ${run.pwpFiles.length} PWP files for GeoTOP folder ${run.id}`);
-        run.logs.push(`[${new Date().toLocaleTimeString()}] GeoTOP folder ${run.id} selected with ${run.pwpFiles.length} ASC files`);
-        if (state.activeConsoleRunId === run.id) renderConsoleForRun(run.id);
-      });
-      run.runBtnEl.addEventListener('click', () => startFormRun(run.id));
-      run.logBtnEl.addEventListener('click', () => renderConsoleForRun(run.id));
-      state.geotopRuns.push(run);
-      summarizeRunFiles(run);
-      if (Object.keys(run.resultFiles).length) renderResultLayerControls(run);
+    state.geotopCards = [];
+    const count = Math.max(1, parseInt(geotopRunCountInput.value || '1', 10));
+    for (let i = 0; i < count; i++) {
+      const card = createGeotopCard(i);
+      state.geotopCards.push(card);
+      geotopRunCards.appendChild(card.el);
     }
-    if (!state.activeConsoleRunId || !getRunById(state.activeConsoleRunId)) {
-      renderConsoleForRun(1);
-    } else {
-      renderConsoleForRun(state.activeConsoleRunId);
-    }
-    buildInputSummary();
+    updateInputSummary();
   }
 
-  function buildInputSummary() {
-    const lines = [];
-    lines.push('<b>Required maps</b>');
-    lines.push(`Slope: ${state.uploadedFiles.slope ? state.uploadedFiles.slope.name : 'Missing'}`);
-    lines.push(`Soil type: ${state.uploadedFiles.soilType ? state.uploadedFiles.soilType.name : 'Missing'}`);
-    lines.push(`Soil thickness: ${state.uploadedFiles.soilThickness ? state.uploadedFiles.soilThickness.name : 'Missing'}`);
-    lines.push(`DEM: ${state.uploadedFiles.dem ? state.uploadedFiles.dem.name : 'Not uploaded'}`);
-    lines.push('');
-    lines.push('<b>FORM general settings</b>');
-    lines.push(`PWP file style: ${psiFileStyleSelect.value}`);
-    lines.push(`PWP unit: ${psiUnitSelect.value}`);
-    lines.push(`Soil thickness unit: ${soilThicknessUnitSelect.value}`);
-    lines.push(`Use all time steps: ${useMultipleTimestepsInput.checked ? 'Yes' : 'No'}`);
-    lines.push(`Single time code: ${singleTimeCodeInput.value}`);
-    lines.push('');
-    lines.push('<b>GeoTOP folders</b>');
-    state.geotopRuns.forEach(run => {
-      const codes = detectTimeCodes(run.pwpFiles);
-      lines.push(`Folder ${run.id}: ${run.pwpFiles.length} files${codes.length ? ` | time codes: ${codes.join(', ')}` : ''}`);
-    });
-    inputSummaryContent.innerHTML = lines.join('<br>');
-  }
-
-  function validateBeforeRun(run) {
-    if (!state.uploadedFiles.slope) return 'Upload slope.asc first';
-    if (!state.uploadedFiles.soilType) return 'Upload soiltype.asc first';
-    if (!state.uploadedFiles.soilThickness) return 'Upload soilthickness.asc first';
-    if (!run.pwpFiles.length) return `Select the GeoTOP PWP folder in box ${run.id} first`;
-    if (!backendUrl()) return 'Set the backend URL first';
-    return null;
-  }
-
-  function clearRunResultLayers(run) {
-    Object.keys(run.resultFiles || {}).forEach(name => {
-      const layerKey = `run${run.id}_${name}`;
-      const existing = state.rasterLayers[layerKey];
-      if (existing && state.map.hasLayer(existing.layer)) state.map.removeLayer(existing.layer);
-      delete state.rasterLayers[layerKey];
-    });
-    run.resultFiles = {};
-    run.resultLayerControlsEl.textContent = 'No FORM outputs yet.';
-  }
-
-  async function startFormRun(runId) {
-    const run = getRunById(runId);
-    if (!run) return;
-    const validationError = validateBeforeRun(run);
-    if (validationError) {
-      run.runStatusEl.textContent = validationError;
-      run.logs.push(`[${new Date().toLocaleTimeString()}] ERROR: ${validationError}`);
-      renderConsoleForRun(run.id);
+  async function runFormCard(card) {
+    if (!(await checkBackend())) return;
+    if (!state.formInputs.slope || !state.formInputs.soilType || !state.formInputs.soilThickness) {
+      addConsoleLine(consoleContent, 'err', 'Upload slope, soiltype, and soilthickness maps first.');
       return;
     }
-
-    clearRunResultLayers(run);
-    run.runBtnEl.disabled = true;
-    run.runStatusEl.textContent = 'Uploading inputs and starting job...';
-    run.logs = [`[${new Date().toLocaleTimeString()}] Submitting FORM job for GeoTOP folder ${run.id}`];
-    renderConsoleForRun(run.id);
-
-    const settings = {
+    if (!card.pwpFiles.length) {
+      addConsoleLine(consoleContent, 'err', 'Upload a GeoTOP PWP folder first.');
+      return;
+    }
+    activateVizPanel('formRunningPanel');
+    setCardStatus(card, 'Uploading...', 'running');
+    const payload = {
       psi_file_style: psiFileStyleSelect.value,
       psi_unit: psiUnitSelect.value,
       soilthickness_unit: soilThicknessUnitSelect.value,
       use_multiple_timesteps: useMultipleTimestepsInput.checked,
-      single_time_code: singleTimeCodeInput.value || '0001',
-      soil_params: collectSoilParams(),
+      single_time_code: singleTimeCodeInput.value,
+      soil_params: collectSoilParams()
     };
-
     const formData = new FormData();
-    formData.append('settings_json', JSON.stringify(settings));
-    formData.append('slope_file', state.uploadedFiles.slope);
-    formData.append('soiltype_file', state.uploadedFiles.soilType);
-    formData.append('soilthickness_file', state.uploadedFiles.soilThickness);
-    if (state.uploadedFiles.dem) formData.append('dem_file', state.uploadedFiles.dem);
-    run.pwpFiles.forEach(file => formData.append('pwp_files', file, file.name));
-
+    formData.append('settings_json', JSON.stringify(payload));
+    formData.append('slope_file', state.formInputs.slope, state.formInputs.slope.name);
+    formData.append('soiltype_file', state.formInputs.soilType, state.formInputs.soilType.name);
+    formData.append('soilthickness_file', state.formInputs.soilThickness, state.formInputs.soilThickness.name);
+    if (state.formInputs.dem) formData.append('dem_file', state.formInputs.dem, state.formInputs.dem.name);
+    card.pwpFiles.forEach(file => formData.append('pwp_files', file, file.webkitRelativePath || file.name));
     try {
-      const response = await fetch(`${backendUrl()}/api/form/run`, { method: 'POST', body: formData });
-      if (!response.ok) {
-        const txt = await response.text();
-        throw new Error(txt || 'Failed to start run');
-      }
-      const data = await response.json();
-      run.jobId = data.job_id;
-      run.runStatusEl.textContent = `Job started: ${data.job_id}`;
-      startPolling(run.id);
-      buildInputSummary();
+      const res = await fetch(`${apiBase()}/api/form/run`, { method: 'POST', body: formData });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      card.jobId = data.job_id;
+      addConsoleLine(consoleContent, 'info', `FORM job ${data.job_id} started${card.labelInput.value ? ` for ${card.labelInput.value}` : ''}`);
+      pollJob(card.jobId, card, 'form');
     } catch (err) {
-      run.runStatusEl.textContent = 'Failed to start';
-      run.logs.push(`[${new Date().toLocaleTimeString()}] ERROR: FORM start failed: ${err.message}`);
-      renderConsoleForRun(run.id);
-      run.runBtnEl.disabled = false;
+      setCardStatus(card, 'Failed', 'failed');
+      addConsoleLine(consoleContent, 'err', `FORM run failed to start: ${err.message}`);
     }
   }
 
-  function startPolling(runId) {
-    const run = getRunById(runId);
-    if (!run) return;
-    if (run.pollHandle) clearInterval(run.pollHandle);
-    pollJob(runId);
-    run.pollHandle = setInterval(() => pollJob(runId), 1200);
-  }
-
-  async function pollJob(runId) {
-    const run = getRunById(runId);
-    if (!run || !run.jobId) return;
-    try {
-      const response = await fetch(`${backendUrl()}/api/jobs/${run.jobId}`);
-      if (!response.ok) throw new Error('Polling failed');
-      const job = await response.json();
-      run.logs = job.logs || [];
-      renderResultSummary();
-      if (state.activeConsoleRunId === run.id) renderConsoleForRun(run.id);
-      if (job.status === 'completed') {
-        run.runStatusEl.textContent = 'Completed';
-        run.runBtnEl.disabled = false;
-        clearInterval(run.pollHandle);
-        run.pollHandle = null;
-        await loadOutputLayers(run, job);
-      } else if (job.status === 'failed') {
-        run.runStatusEl.textContent = `Failed: ${job.error || 'Unknown error'}`;
-        run.runBtnEl.disabled = false;
-        clearInterval(run.pollHandle);
-        run.pollHandle = null;
+  async function pollJob(jobId, owner, mode) {
+    const targetConsole = mode === 'form' ? consoleContent : mlConsoleContent;
+    let lastLogCount = 0;
+    const poll = async () => {
+      const res = await fetch(`${apiBase()}/api/jobs/${jobId}`);
+      const job = await res.json();
+      const newLogs = job.logs.slice(lastLogCount);
+      newLogs.forEach(line => addConsoleLine(targetConsole, line.includes('ERROR') ? 'err' : 'info', line.replace(/^\[[^\]]+\]\s*/, '')));
+      lastLogCount = job.logs.length;
+      if (mode === 'form') {
+        setCardStatus(owner, job.status, job.status);
       } else {
-        run.runStatusEl.textContent = `Status: ${job.status}`;
+        mlRunStatus.textContent = `Machine learning job status: ${job.status}`;
       }
-    } catch (err) {
-      run.logs.push(`[${new Date().toLocaleTimeString()}] ERROR: Polling error: ${err.message}`);
-      if (state.activeConsoleRunId === run.id) renderConsoleForRun(run.id);
-    }
+      if (job.status === 'completed') {
+        if (mode === 'form') handleFormCompleted(owner, job);
+        if (mode === 'ml_prepare') handlePrepCompleted(job);
+        if (mode === 'ml_run') handleMlCompleted(job);
+        return;
+      }
+      if (job.status === 'failed') {
+        if (mode === 'form') setCardStatus(owner, 'Failed', 'failed');
+        if (mode === 'ml_prepare') dataPrepStatus.textContent = `Data preparation failed: ${job.error || 'Unknown error'}`;
+        if (mode === 'ml_run') mlRunStatus.textContent = `Machine learning failed: ${job.error || 'Unknown error'}`;
+        return;
+      }
+      setTimeout(poll, 2000);
+    };
+    poll();
   }
 
-  function renderResultSummary() {
-    const lines = [];
-    state.geotopRuns.forEach(run => {
-      lines.push(`<b>GeoTOP folder ${run.id}</b>: ${run.runStatusEl.textContent}`);
-      const outputNames = Object.keys(run.resultFiles || {});
-      if (outputNames.length) lines.push(`Outputs: ${outputNames.join(', ')}`);
+  function renderResultLayerControls(container, jobId, outputs, prefixKey) {
+    container.innerHTML = '';
+    Object.entries(outputs).forEach(([name, relativeUrl]) => {
+      const row = document.createElement('div'); row.className = 'layer-row';
+      const downloadUrl = `${apiBase()}${relativeUrl}`;
+      row.innerHTML = `<span>${name}</span><div class="layer-actions"><label><input type="checkbox" ${name.toLowerCase().includes('pof') ? 'checked' : ''}/> View</label><a href="${downloadUrl}" target="_blank" rel="noopener">Download</a></div>`;
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      const layerKey = `${prefixKey}_${name}`;
+      checkbox.addEventListener('change', async () => {
+        if (checkbox.checked) {
+          await displayAscUrl(downloadUrl, layerKey, name);
+        } else if (rasterLayers[layerKey] && map.hasLayer(rasterLayers[layerKey].layer)) {
+          map.removeLayer(rasterLayers[layerKey].layer);
+          delete rasterLayers[layerKey];
+        }
+      });
+      container.appendChild(row);
+      if (checkbox.checked) displayAscUrl(downloadUrl, layerKey, name).catch(() => {});
     });
-    resultSummaryContent.innerHTML = lines.join('<br>') || 'No result summary yet.';
   }
 
-  async function loadOutputLayers(run, job) {
-    run.resultFiles = {};
-    const names = ['PoF.asc', 'FS_min.asc', 'FS_min_depth.asc', 'beta.asc'];
-    for (const name of names) {
-      if (!job.outputs || !job.outputs[name]) continue;
-      const textUrl = `${backendUrl()}/api/jobs/${run.jobId}/outputs/${encodeURIComponent(name)}/text`;
-      const response = await fetch(textUrl);
-      if (!response.ok) continue;
-      const text = await response.text();
-      const asc = parseAsc(text);
-      run.resultFiles[name] = { text, asc, downloadUrl: `${backendUrl()}${job.outputs[name]}`, visible: false };
-    }
-    renderResultLayerControls(run);
-    if (run.resultFiles['PoF.asc']) toggleResultLayer(run.id, 'PoF.asc', true);
-    renderResultSummary();
+  function handleFormCompleted(card, job) {
+    setCardStatus(card, 'Completed', 'completed');
+    renderResultLayerControls(card.resultLayers, job.job_id, job.outputs, `form_${job.job_id}`);
+    updateResultSummary(`Latest FORM job ${job.job_id} completed.\n${JSON.stringify(job.summary, null, 2)}`);
+    activateVizPanel('resultSummaryPanel');
   }
 
-  function renderResultLayerControls(run) {
-    const entries = Object.entries(run.resultFiles || {});
-    if (!entries.length) {
-      run.resultLayerControlsEl.textContent = 'No FORM outputs yet.';
+  function initMlHyperparameters() {
+    mlHyperparametersGrid.innerHTML = '';
+    defaultHyperparameters.forEach(([key, value]) => {
+      const wrap = document.createElement('div'); wrap.className = 'field-group';
+      wrap.innerHTML = `<label class="field-label">${key}</label><input class="field-input" data-ml-param="${key}" type="number" step="any" value="${value}" />`;
+      mlHyperparametersGrid.appendChild(wrap);
+    });
+  }
+
+  function updateStageEventSelectors() {
+    const events = state.ml.detectedEvents.slice();
+    const checkedTest = Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value);
+    const remainingForVal = events.filter(e => !checkedTest.includes(e));
+    stage1ValEventsBox.innerHTML = '';
+    remainingForVal.forEach(eventId => {
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" value="${eventId}" /> ${eventId}`;
+      stage1ValEventsBox.appendChild(label);
+    });
+    const checkedVal = Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value);
+    const remainingForStage2 = events.filter(e => !checkedTest.includes(e) && !checkedVal.includes(e));
+    stage2EventSelect.innerHTML = remainingForStage2.map(e => `<option value="${e}">${e}</option>`).join('');
+  }
+
+  function renderStageEventBoxes() {
+    stage1TestEventsBox.innerHTML = '';
+    state.ml.detectedEvents.forEach((eventId, idx) => {
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" value="${eventId}" ${idx < Math.min(4, state.ml.detectedEvents.length) ? 'checked' : ''}/> ${eventId}`;
+      label.querySelector('input').addEventListener('change', updateStageEventSelectors);
+      stage1TestEventsBox.appendChild(label);
+    });
+    updateStageEventSelectors();
+  }
+
+  function renderRainfallBoxes() {
+    rainfallEventContainer.innerHTML = '';
+    state.ml.detectedEvents.forEach(eventId => {
+      const defaults = state.rainfallDefaults[eventId] || { E: 0, D: 0, PI: 0 };
+      if (!state.ml.rainfall[eventId]) state.ml.rainfall[eventId] = { E: defaults.E, D: defaults.D, PI: defaults.PI };
+      const values = state.ml.rainfall[eventId];
+      const card = document.createElement('div'); card.className = 'geotop-card';
+      card.innerHTML = `
+        <div class="geotop-title">Rainfall event ${eventId}</div>
+        <div class="field-grid two-col">
+          <div class="field-group"><label class="field-label">Accumulated rainfall (E)</label><input class="field-input" data-k="E" type="number" step="any" value="${values.E}" /></div>
+          <div class="field-group"><label class="field-label">Rainfall duration (D)</label><input class="field-input" data-k="D" type="number" step="any" value="${values.D}" /></div>
+          <div class="field-group"><label class="field-label">Peak intensity rainfall (PI)</label><input class="field-input" data-k="PI" type="number" step="any" value="${values.PI}" /></div>
+        </div>`;
+      card.querySelectorAll('[data-k]').forEach(input => {
+        input.addEventListener('input', () => { state.ml.rainfall[eventId][input.dataset.k] = parseFloat(input.value || '0'); });
+      });
+      rainfallEventContainer.appendChild(card);
+    });
+  }
+
+  function renderMlMapLayerControls() {
+    mlMapLayersList.innerHTML = '';
+    state.ml.mapFiles.forEach((file, idx) => {
+      const row = document.createElement('div'); row.className = 'layer-row';
+      row.innerHTML = `<span>${file.name}</span><div class="layer-actions"><label><input type="checkbox"/> View</label></div>`;
+      const checkbox = row.querySelector('input');
+      const key = `ml_map_${idx}_${file.name}`;
+      checkbox.addEventListener('change', async () => {
+        if (checkbox.checked) await displayAscFile(file, key, file.name);
+        else if (rasterLayers[key] && map.hasLayer(rasterLayers[key].layer)) { map.removeLayer(rasterLayers[key].layer); delete rasterLayers[key]; }
+      });
+      mlMapLayersList.appendChild(row);
+    });
+  }
+
+  function parseDetectedEventsFromFormFiles(files) {
+    const set = new Set();
+    files.forEach(file => {
+      const path = (file.webkitRelativePath || file.name).replace(/\\/g, '/');
+      if (/PoF\.asc$/i.test(path)) {
+        const parts = path.split('/');
+        if (parts.length >= 2) set.add(parts[parts.length - 2]);
+      }
+    });
+    return [...set].sort();
+  }
+
+  async function runDataPreparation() {
+    if (!(await checkBackend())) return;
+    if (!state.ml.mapFiles.length || !state.ml.formOutputFiles.length) {
+      addConsoleLine(mlConsoleContent, 'err', 'Upload map folder and FORM outputs folder first.');
       return;
     }
-    run.resultLayerControlsEl.innerHTML = '';
-    entries.forEach(([name, info]) => {
-      const row = document.createElement('div');
-      row.className = 'result-layer-row';
-      row.innerHTML = `
-        <div>
-          <div class="result-layer-name">${name}</div>
-          <div class="result-layer-subtitle">Generated for GeoTOP folder ${run.id}</div>
-        </div>
-        <div class="result-layer-actions">
-          <label class="checkbox-inline"><input type="checkbox" ${name === 'PoF.asc' ? 'checked' : ''}/> View</label>
-          <a href="${info.downloadUrl}" target="_blank" rel="noopener" download>Download</a>
-        </div>
-      `;
-      const checkbox = row.querySelector('input[type="checkbox"]');
-      checkbox.addEventListener('change', () => toggleResultLayer(run.id, name, checkbox.checked));
-      run.resultLayerControlsEl.appendChild(row);
-    });
-  }
-
-  function toggleResultLayer(runId, name, shouldShow) {
-    const run = getRunById(runId);
-    if (!run || !run.resultFiles[name]) return;
-    const result = run.resultFiles[name];
-    const layerKey = `run${runId}_${name}`;
-    const existing = state.rasterLayers[layerKey];
-    if (shouldShow) {
-      if (existing) {
-        if (!state.map.hasLayer(existing.layer)) existing.layer.addTo(state.map);
-        existing.visible = true;
-        state.activeLayerKey = layerKey;
-        updateActiveLayerStats(existing);
-      } else {
-        addAscLayer(result.asc, `run${runId}_${name}`, layerKey, `Run ${runId} - ${name.replace('.asc', '')}`, null);
-      }
-      result.visible = true;
-      mapEmptyNote.style.display = 'none';
-    } else {
-      if (existing && state.map.hasLayer(existing.layer)) {
-        state.map.removeLayer(existing.layer);
-        existing.visible = false;
-      }
-      result.visible = false;
-      const visibleKeys = Object.keys(state.rasterLayers).filter(key => state.rasterLayers[key].visible && state.map.hasLayer(state.rasterLayers[key].layer));
-      if (visibleKeys.length) {
-        state.activeLayerKey = visibleKeys[visibleKeys.length - 1];
-        updateActiveLayerStats(state.rasterLayers[state.activeLayerKey]);
-      } else {
-        state.activeLayerKey = null;
-        mapEmptyNote.style.display = 'block';
-        updateActiveLayerStats(null);
-      }
+    activateRightPanel('mlPanel'); activateVizPanel('mlRunningPanel');
+    dataPrepStatus.textContent = 'Preparing and uploading data...';
+    const fd = new FormData();
+    fd.append('rainfall_json', JSON.stringify(state.ml.rainfall));
+    state.ml.mapFiles.forEach(file => fd.append('map_files', file, file.webkitRelativePath || file.name));
+    state.ml.formOutputFiles.forEach(file => fd.append('form_output_files', file, file.webkitRelativePath || file.name));
+    try {
+      const res = await fetch(`${apiBase()}/api/ml/prepare`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      state.ml.prepJobId = data.job_id;
+      addConsoleLine(mlConsoleContent, 'info', `Data preparation job ${data.job_id} started`);
+      pollJob(data.job_id, null, 'ml_prepare');
+    } catch (err) {
+      dataPrepStatus.textContent = `Data preparation failed to start: ${err.message}`;
+      addConsoleLine(mlConsoleContent, 'err', err.message);
     }
   }
 
-  document.querySelectorAll('.viz-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.viz-tab').forEach(btn => btn.classList.remove('active'));
-      document.querySelectorAll('.viz-panel').forEach(panel => panel.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById(tab.dataset.viz).classList.add('active');
-    });
-  });
+  async function handlePrepCompleted(job) {
+    state.ml.prepJobId = job.job_id;
+    dataPrepStatus.textContent = `Data preparation completed. stage1_base_dataset.csv ready.`;
+    const previewUrl = `${apiBase()}${job.outputs['stage1_base_dataset_preview.csv'] || job.outputs['stage1_base_dataset_preview.csv'.replace('.csv','')] || ''}`;
+    const previewKey = Object.keys(job.outputs).find(k => k.toLowerCase().includes('preview'));
+    if (previewKey) {
+      const previewText = await fetch(`${apiBase()}${job.outputs[previewKey]}`).then(r => r.text()).catch(() => 'Preview unavailable');
+      dataPrepContent.textContent = previewText;
+      activateVizPanel('dataPrepPanel');
+    }
+    updateResultSummary(`ML data preparation completed.\n${JSON.stringify(job.summary, null, 2)}`);
+  }
 
-  Object.keys(rasterConfigs).forEach(layerKey => {
-    const cfg = rasterConfigs[layerKey];
-    cfg.input.addEventListener('change', async e => {
-      const file = e.target.files[0];
+  function collectMlConfig() {
+    const params = {};
+    mlHyperparametersGrid.querySelectorAll('[data-ml-param]').forEach(input => { params[input.dataset.mlParam] = parseFloat(input.value); });
+    const testEvents = Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value);
+    const valEvents = Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value);
+    return {
+      ...params,
+      stage1_test_events: testEvents,
+      stage1_val_events: valEvents,
+      stage2_enabled: stage2EnabledInput.checked,
+      stage2_event: stage2EnabledInput.checked ? stage2EventSelect.value : null
+    };
+  }
+
+  async function runMachineLearning() {
+    if (!(await checkBackend())) return;
+    if (!state.ml.prepJobId) {
+      addConsoleLine(mlConsoleContent, 'err', 'Run data preparation first.');
+      return;
+    }
+    activateRightPanel('mlPanel'); activateVizPanel('mlRunningPanel');
+    mlRunStatus.textContent = 'Starting machine learning...';
+    const fd = new FormData();
+    fd.append('prep_job_id', state.ml.prepJobId);
+    fd.append('config_json', JSON.stringify(collectMlConfig()));
+    if (stage2EnabledInput.checked && state.ml.labelFile) fd.append('label_file', state.ml.labelFile, state.ml.labelFile.name);
+    try {
+      const res = await fetch(`${apiBase()}/api/ml/run`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      state.ml.mlJobId = data.job_id;
+      addConsoleLine(mlConsoleContent, 'info', `Machine learning job ${data.job_id} started`);
+      pollJob(data.job_id, null, 'ml_run');
+    } catch (err) {
+      mlRunStatus.textContent = `Machine learning failed to start: ${err.message}`;
+      addConsoleLine(mlConsoleContent, 'err', err.message);
+    }
+  }
+
+  function handleMlCompleted(job) {
+    mlRunStatus.textContent = 'Machine learning completed.';
+    mlResultLayersList.innerHTML = '';
+    Object.entries(job.outputs).forEach(([name, relativeUrl]) => {
+      if (!name.toLowerCase().endsWith('.asc')) return;
+      const row = document.createElement('div'); row.className = 'layer-row';
+      const fullUrl = `${apiBase()}${relativeUrl}`;
+      row.innerHTML = `<span>${name}</span><div class="layer-actions"><label><input type="checkbox" ${name.toLowerCase().includes('stage2_final_prob') ? 'checked' : ''}/> View</label><a href="${fullUrl}" target="_blank" rel="noopener">Download</a></div>`;
+      const key = `ml_result_${job.job_id}_${name}`;
+      const checkbox = row.querySelector('input');
+      checkbox.addEventListener('change', async () => {
+        if (checkbox.checked) await displayAscUrl(fullUrl, key, name);
+        else if (rasterLayers[key] && map.hasLayer(rasterLayers[key].layer)) { map.removeLayer(rasterLayers[key].layer); delete rasterLayers[key]; }
+      });
+      mlResultLayersList.appendChild(row);
+      if (checkbox.checked) displayAscUrl(fullUrl, key, name).catch(() => {});
+    });
+
+    mlPlotsContent.innerHTML = '';
+    Object.entries(job.plots || {}).forEach(([name, relativeUrl]) => {
+      const fullUrl = `${apiBase()}${relativeUrl}`;
+      const card = document.createElement('div'); card.className = 'plot-card';
+      card.innerHTML = `<div class="field-label">${name}</div><img src="${fullUrl}" alt="${name}" /><a href="${fullUrl}" target="_blank" rel="noopener">Download</a>`;
+      mlPlotsContent.appendChild(card);
+    });
+    activateVizPanel('mlAnalysePanel');
+    updateResultSummary(`Machine learning completed.\n${JSON.stringify(job.summary, null, 2)}`);
+  }
+
+  function onRasterSelected(key, file) {
+    state.formInputs[key] = file;
+    const configKey = key === 'soilType' ? 'soilType' : key === 'soilThickness' ? 'soilThickness' : key;
+    rasterConfigs[configKey].selectedFile.textContent = file ? file.name : 'None';
+    rasterConfigs[configKey].viewToggle.disabled = !file;
+    rasterConfigs[configKey].viewToggle.checked = !!file;
+    if (file) displayAscFile(file, `base_${key}`, file.name).catch(err => addConsoleLine(consoleContent, 'err', err.message));
+    updateInputSummary();
+  }
+
+  Object.entries(rasterConfigs).forEach(([key, cfg]) => {
+    cfg.input.addEventListener('change', () => {
+      const file = cfg.input.files && cfg.input.files[0];
       if (!file) return;
-      cfg.selectedFile.textContent = file.name;
-      state.uploadedFiles[layerKey] = file;
-      try {
-        await handleRasterFile(file, layerKey, cfg.label, cfg.viewToggle);
-        buildInputSummary();
-      } catch (err) {
-        addConsoleLine('err', err.message);
-      }
-    });
-    cfg.viewToggle.addEventListener('change', () => {
-      const layerObj = state.rasterLayers[layerKey];
-      if (!layerObj) return;
-      if (cfg.viewToggle.checked) {
-        layerObj.layer.addTo(state.map);
-        layerObj.visible = true;
-        state.activeLayerKey = layerKey;
-        updateActiveLayerStats(layerObj);
-      } else if (state.map.hasLayer(layerObj.layer)) {
-        state.map.removeLayer(layerObj.layer);
-        layerObj.visible = false;
-      }
+      const stateKey = key === 'soilType' ? 'soilType' : key === 'soilThickness' ? 'soilThickness' : key;
+      onRasterSelected(stateKey, file);
+      cfg.viewToggle.onchange = async () => {
+        const layerKey = `base_${stateKey}`;
+        if (cfg.viewToggle.checked) await displayAscFile(file, layerKey, file.name);
+        else if (rasterLayers[layerKey] && map.hasLayer(rasterLayers[layerKey].layer)) { map.removeLayer(rasterLayers[layerKey].layer); delete rasterLayers[layerKey]; }
+      };
     });
   });
 
-  [psiFileStyleSelect, psiUnitSelect, soilThicknessUnitSelect, useMultipleTimestepsInput, singleTimeCodeInput].forEach(el => {
-    el.addEventListener('change', () => {
-      state.geotopRuns.forEach(run => summarizeRunFiles(run));
-      buildInputSummary();
-    });
+  mlMapsFolderInput.addEventListener('change', () => {
+    state.ml.mapFiles = Array.from(mlMapsFolderInput.files || []).filter(f => /\.asc$/i.test(f.name));
+    mlMapsSummary.textContent = `${state.ml.mapFiles.length} ASC map files detected.`;
+    renderMlMapLayerControls();
+    updateInputSummary();
   });
 
-  generateFormInputsBtn.addEventListener('click', generateFormInputs);
-  generateGeotopRunsBtn.addEventListener('click', generateGeotopRunCards);
+  mlFormOutputsFolderInput.addEventListener('change', () => {
+    state.ml.formOutputFiles = Array.from(mlFormOutputsFolderInput.files || []).filter(f => /\.(asc|txt|csv)$/i.test(f.name));
+    state.ml.detectedEvents = parseDetectedEventsFromFormFiles(state.ml.formOutputFiles);
+    mlFormOutputsSummary.textContent = `${state.ml.formOutputFiles.length} files uploaded from FORM outputs folder.`;
+    mlDetectedEventsBox.textContent = state.ml.detectedEvents.length ? `Detected event_id from PoF.asc folders:\n${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected.';
+    renderRainfallBoxes();
+    renderStageEventBoxes();
+    updateInputSummary();
+  });
+
+  landslideLabelInput.addEventListener('change', () => {
+    state.ml.labelFile = landslideLabelInput.files && landslideLabelInput.files[0] ? landslideLabelInput.files[0] : null;
+    landslideLabelSummary.textContent = state.ml.labelFile ? state.ml.labelFile.name : 'None';
+    landslideLabelViewToggle.disabled = !state.ml.labelFile;
+    landslideLabelViewToggle.checked = !!state.ml.labelFile;
+    if (state.ml.labelFile) displayAscFile(state.ml.labelFile, 'ml_label_map', state.ml.labelFile.name).catch(() => {});
+    landslideLabelViewToggle.onchange = async () => {
+      if (landslideLabelViewToggle.checked && state.ml.labelFile) await displayAscFile(state.ml.labelFile, 'ml_label_map', state.ml.labelFile.name);
+      else if (rasterLayers.ml_label_map && map.hasLayer(rasterLayers.ml_label_map.layer)) { map.removeLayer(rasterLayers.ml_label_map.layer); delete rasterLayers.ml_label_map; }
+    };
+  });
+
+  document.querySelectorAll('.viz-tab').forEach(btn => btn.addEventListener('click', () => activateVizPanel(btn.dataset.viz)));
+  document.querySelectorAll('.right-workflow-tab').forEach(btn => btn.addEventListener('click', () => activateRightPanel(btn.dataset.rightPanel)));
+  basemapSelect.addEventListener('change', () => setBaseLayer(basemapSelect.value));
+  document.getElementById('resetViewBtn').addEventListener('click', () => map.setView(defaultMapView.center, defaultMapView.zoom));
+  document.getElementById('fitLayerBtn').addEventListener('click', () => { if (activeLayerKey && rasterLayers[activeLayerKey]) map.fitBounds(rasterLayers[activeLayerKey].bounds, { padding: [20,20] }); });
+  document.getElementById('clearLayerBtn').addEventListener('click', clearAllLayers);
   checkBackendBtn.addEventListener('click', checkBackend);
-  backendUrlInput.addEventListener('change', () => {
-    const value = backendUrl();
-    if (value) localStorage.setItem('landslide_backend_url', value);
-  });
-  basemapSelect.addEventListener('change', e => setBaseLayer(e.target.value));
-  resetViewBtn.addEventListener('click', resetMapView);
-  fitLayerBtn.addEventListener('click', fitActiveLayer);
-  clearLayerBtn.addEventListener('click', clearAllLayers);
+  generateFormInputsBtn.addEventListener('click', createSoilInputs);
+  generateGeotopRunsBtn.addEventListener('click', createGeotopCards);
+  runDataPrepBtn.addEventListener('click', runDataPreparation);
+  runMlBtn.addEventListener('click', runMachineLearning);
+  stage2EnabledInput.addEventListener('change', () => { stage2ConfigWrap.style.display = stage2EnabledInput.checked ? 'block' : 'none'; });
 
-  initializeBackendInput();
+  backendUrlInput.value = state.backendUrl;
   initMap();
-  generateFormInputs();
-  generateGeotopRunCards();
-  buildInputSummary();
+  createSoilInputs();
+  createGeotopCards();
+  initMlHyperparameters();
+  stage2ConfigWrap.style.display = stage2EnabledInput.checked ? 'block' : 'none';
+  updateInputSummary();
+  checkBackend();
 })();
