@@ -1,5 +1,6 @@
 (function () {
-  const defaultBackendUrl = 'http://127.0.0.1:8000';
+  const localBackendUrl = 'http://127.0.0.1:8000';
+  const configuredBackendUrl = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL ? String(window.APP_CONFIG.API_BASE_URL).trim() : '');
   const defaultMapView = { center: [29.72, 119.96], zoom: 10 };
 
   const rasterConfigs = {
@@ -68,8 +69,20 @@
     proj4.defs('EPSG:4549', '+proj=tmerc +lat_0=0 +lon_0=120 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs +type=crs');
   }
 
+  function isLocalHost(hostname) {
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  }
+
+  function initialBackendUrl() {
+    const saved = (localStorage.getItem('landslide_backend_url') || '').trim();
+    if (saved) return saved;
+    if (configuredBackendUrl) return configuredBackendUrl.replace(/\/$/, '');
+    if (isLocalHost(window.location.hostname)) return localBackendUrl;
+    return '';
+  }
+
   function backendUrl() {
-    return (backendUrlInput.value || defaultBackendUrl).replace(/\/$/, '');
+    return (backendUrlInput.value || '').trim().replace(/\/$/, '');
   }
 
   function addConsoleLine(type, message) {
@@ -84,20 +97,45 @@
     uploadStatus.textContent = message;
   }
 
+  function initializeBackendInput() {
+    const initial = initialBackendUrl();
+    backendUrlInput.value = initial;
+    if (initial) {
+      backendStatus.textContent = 'Ready to check';
+      backendStatus.className = '';
+    } else {
+      backendStatus.textContent = 'Set backend URL';
+      backendStatus.className = 'bad';
+      addConsoleLine('warn', 'No backend URL configured yet. Set config.js or paste your deployed backend URL.');
+    }
+  }
+
   async function checkBackend() {
+    const url = backendUrl();
+    if (!url) {
+      backendStatus.textContent = 'Set backend URL';
+      backendStatus.className = 'bad';
+      addConsoleLine('warn', 'Backend URL is empty. For online deployment, use your Render/Railway/VPS HTTPS URL.');
+      return;
+    }
+
     backendStatus.textContent = 'Checking...';
     backendStatus.className = '';
     try {
-      const res = await fetch(`${backendUrl()}/api/health`);
-      if (!res.ok) throw new Error('Health check failed');
+      const res = await fetch(`${url}/api/health`, { method: 'GET', mode: 'cors' });
+      if (!res.ok) throw new Error(`Health check failed (${res.status})`);
       const data = await res.json();
       backendStatus.textContent = `Connected (${data.status})`;
       backendStatus.className = 'ok';
-      addConsoleLine('info', `Backend connected: ${backendUrl()}`);
+      localStorage.setItem('landslide_backend_url', url);
+      addConsoleLine('info', `Backend connected: ${url}`);
     } catch (err) {
       backendStatus.textContent = 'Not reachable';
       backendStatus.className = 'bad';
       addConsoleLine('err', `Backend not reachable: ${err.message}`);
+      if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+        addConsoleLine('err', 'Your frontend is HTTPS but the backend URL is HTTP. Browsers block this as mixed content. Use an HTTPS backend URL.');
+      }
     }
   }
 
@@ -632,11 +670,16 @@
   generateFormInputsBtn.addEventListener('click', generateFormInputs);
   runFormBtn.addEventListener('click', startFormRun);
   checkBackendBtn.addEventListener('click', checkBackend);
+  backendUrlInput.addEventListener('change', () => {
+    const value = backendUrl();
+    if (value) localStorage.setItem('landslide_backend_url', value);
+  });
   basemapSelect.addEventListener('change', e => setBaseLayer(e.target.value));
   resetViewBtn.addEventListener('click', resetMapView);
   fitLayerBtn.addEventListener('click', fitActiveLayer);
   clearLayerBtn.addEventListener('click', clearAllLayers);
 
+  initializeBackendInput();
   initMap();
   generateFormInputs();
   buildInputSummary();

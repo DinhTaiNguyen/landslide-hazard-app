@@ -24,7 +24,7 @@ app = FastAPI(title="Landslide Hazard FORM Backend")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -41,6 +41,11 @@ def save_upload(upload: UploadFile, destination: Path) -> Path:
     with destination.open("wb") as f:
         shutil.copyfileobj(upload.file, f)
     return destination
+
+
+@app.get("/")
+def root() -> dict:
+    return {"service": "Landslide Hazard FORM Backend", "status": "ok", "health": "/api/health"}
 
 
 @app.get("/api/health")

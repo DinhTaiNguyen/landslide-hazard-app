@@ -6,6 +6,7 @@
   <title>Landslide Hazard App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="style.css" />
+    <script src="config.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -19,7 +20,7 @@
       </div>
       <div class="backend-line">
         <label for="backendUrlInput">Backend URL</label>
-        <input id="backendUrlInput" type="text" value="http://127.0.0.1:8000" />
+        <input id="backendUrlInput" type="text" placeholder="https://your-backend.onrender.com" />
         <button id="checkBackendBtn" type="button" class="small-btn">Check</button>
         <span id="backendStatus">Waiting</span>
       </div>

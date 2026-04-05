@@ -1,120 +1,87 @@
-# Landslide Hazard App - Online FORM Workflow
+# Landslide Hazard App
 
-This repo is split into two parts:
+This repo is split into a static frontend and a Python backend.
 
-- `frontend/` -> static website UI
-- `backend/` -> FastAPI service that receives uploaded files, runs the Python FORM workflow, stores outputs, and serves downloadable result maps
+## Why the old "Backend URL" showed `Not reachable`
+
+The earlier version prefilled the backend as `http://127.0.0.1:8000`. That only works on your own computer.
+When the frontend is published online, every visitor's browser interprets `127.0.0.1` as **their own machine**, not your server, so the check fails.
+
+A second common problem is **mixed content**: if the frontend is opened over `https`, browsers block calls to a backend that still uses `http`.
 
 ## What changed in this version
 
-- GeoTOP PWP folder upload was moved into the **FORM panel**.
-- Clicking **Run** uploads the current inputs to the backend and starts the Python FORM workflow.
-- Runtime logs appear in the **FORM running** tab.
-- Generated outputs are written as:
-  - `PoF.asc`
-  - `FS_min.asc`
-  - `FS_min_depth.asc`
-  - `beta.asc`
-- In the FORM panel, each result can be turned on/off and downloaded.
-- Default visible result is `PoF.asc`.
+- The frontend no longer hardcodes `127.0.0.1` for online use.
+- `config.js` is used to store the deployed backend URL.
+- The backend URL entered in the UI is saved in `localStorage`.
+- The frontend now warns when the backend is empty or when HTTPS frontend tries to call an HTTP backend.
+- A `render.yaml` file is included for easy Render deployment.
+- The backend CORS configuration was simplified for browser-safe public access.
 
-## Folder structure
+## Repo structure
 
-```text
-landslide-hazard-app-restructured/
-  frontend/
-    index.html
-    style.css
-    script.js
-    images/
-      GeoXPM_logo_3D.png
-  backend/
-    app.py
-    form_runner.py
-    requirements.txt
-    runs/                # created automatically at runtime
 ```
+index.html
+style.css
+script.js
+config.js
+images/
+backend/
+frontend/
+render.yaml
+```
+
+Use the root `index.html` for GitHub Pages.
+
+## Deploy online
+
+### 1. Deploy backend to Render
+
+This repo already includes `render.yaml`.
+
+On Render:
+1. Create a new Web Service from your GitHub repo.
+2. Render should detect `render.yaml`.
+3. Deploy.
+4. After deploy, copy the backend URL, for example:
+   `https://landslide-hazard-form-backend.onrender.com`
+
+You can test it by opening:
+`https://your-backend-url/api/health`
+
+### 2. Set frontend config
+
+Edit `config.js` in the repo root to:
+
+```js
+window.APP_CONFIG = window.APP_CONFIG || {
+  API_BASE_URL: 'https://your-backend-url.onrender.com'
+};
+```
+
+### 3. Deploy frontend to GitHub Pages
+
+Publish from the repository root so that `index.html` is served directly.
 
 ## Local run
 
 ### Backend
-
 ```bash
 cd backend
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
-
 pip install -r requirements.txt
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Frontend
+Open the root `index.html`, or run a static server from the repo root.
 
-```bash
-cd frontend
-python -m http.server 5500
+## Runtime storage
+
+Each FORM run is stored under:
+
+```
+backend/runs/run_<jobid>/inputs
+backend/runs/run_<jobid>/outputs
 ```
 
-Open:
-- frontend: `http://127.0.0.1:5500`
-- backend: `http://127.0.0.1:8000`
-
-## How uploaded data is stored
-
-Each run gets its own folder:
-
-```text
-backend/runs/run_<job_id>/
-  inputs/
-    slope.asc
-    soiltype.asc
-    soilthickness.asc
-    dem.asc               # optional
-    pwp/
-      psizL0000N0001.asc
-      ...
-  outputs/
-    PoF.asc
-    FS_min.asc
-    FS_min_depth.asc
-    beta.asc
-```
-
-This makes it easy to:
-- keep each website run separate
-- debug failed runs
-- allow users to download generated files after completion
-
-## Online deployment recommendation
-
-### Frontend online
-Use **GitHub Pages** for `frontend/`.
-
-1. Push this repo to GitHub.
-2. Put the website files from `frontend/` on the branch you want to publish.
-3. In GitHub repo settings, enable **Pages** and publish from the folder or branch you choose.
-4. In the website UI, set **Backend URL** to your deployed backend URL.
-
-### Backend online
-Use **Render**, **Railway**, or a VPS.
-
-Example for Render:
-1. Create a new web service.
-2. Point it to the `backend/` folder.
-3. Build command:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Start command:
-   ```bash
-   uvicorn app:app --host 0.0.0.0 --port $PORT
-   ```
-
-Because the backend stores uploaded files and generated outputs on disk, the hosting platform must support writable local storage during runtime. For long-term persistence, later you can move storage to S3, Cloudflare R2, or another object store.
-
-## Important note
-
-GitHub Pages is static hosting only. It cannot execute your Python FORM code by itself. That is why the FORM run must go to the backend.
+Uploaded files are saved in `inputs/`. Generated ASC maps are saved in `outputs/` and exposed through the API so users can view and download them.
