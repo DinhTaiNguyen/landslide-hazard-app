@@ -329,6 +329,71 @@ def stratified_split_single_event(df, label_col, train_frac, val_frac, test_frac
     return train_df, val_df, test_df
 
 
+
+
+def infer_csv_dtypes(csv_path: Path) -> dict:
+    header = pd.read_csv(csv_path, nrows=0)
+    dtypes = {}
+    for col in header.columns:
+        if col == "grid_id":
+            dtypes[col] = np.int32
+        elif col in {"soiltype_code", "landcover_code", "label"}:
+            dtypes[col] = np.int16
+        elif col in {"event_id", "geology", "landcover_class"}:
+            dtypes[col] = "string"
+        else:
+            dtypes[col] = np.float32
+    return dtypes
+
+
+def load_sampled_split(csv_path: Path, event_ids: List[str], dtypes: dict, max_rows: int, seed: int, log: LogFn, label: str) -> pd.DataFrame:
+    if not event_ids:
+        return pd.DataFrame()
+    rng = np.random.default_rng(seed)
+    sample = None
+    rows_seen = 0
+    chunks = 0
+    for chunk in pd.read_csv(csv_path, dtype=dtypes, chunksize=40000):
+        chunk["event_id"] = chunk["event_id"].astype(str)
+        filt = chunk[chunk["event_id"].isin(event_ids)]
+        if filt.empty:
+            continue
+        chunks += 1
+        rows_seen += len(filt)
+        if sample is None:
+            sample = filt.copy()
+        else:
+            sample = pd.concat([sample, filt], ignore_index=True)
+        if len(sample) > max_rows:
+            take_idx = rng.choice(len(sample), size=max_rows, replace=False)
+            sample = sample.iloc[take_idx].reset_index(drop=True)
+        del chunk
+        del filt
+    if sample is None:
+        sample = pd.DataFrame()
+    sampled = len(sample)
+    if rows_seen > sampled:
+        log(f"{label}: sampled {sampled:,} rows from {rows_seen:,} available rows to stay within memory limits")
+    else:
+        log(f"{label}: loaded {sampled:,} rows")
+    return sample.reset_index(drop=True)
+
+
+def chunk_reader_for_events(csv_path: Path, event_ids: List[str], dtypes: dict, chunksize: int = 40000):
+    wanted = set(str(e) for e in event_ids)
+    for chunk in pd.read_csv(csv_path, dtype=dtypes, chunksize=chunksize):
+        chunk["event_id"] = chunk["event_id"].astype(str)
+        filt = chunk[chunk["event_id"].isin(wanted)]
+        if not filt.empty:
+            yield filt.reset_index(drop=True)
+
+
+def cleanup_frame(df: Optional[pd.DataFrame]):
+    if df is not None:
+        for col in [c for c in ["geology", "landcover_class", "event_id"] if c in df.columns]:
+            df[col] = df[col].astype(str)
+
+
 def run_ml_pipeline(
     dataset_csv: Path,
     reference_asc: Path,
@@ -343,34 +408,29 @@ def run_ml_pipeline(
     plot_dir = output_dir / "plots"; plot_dir.mkdir(exist_ok=True)
     model_dir = output_dir / "models"; model_dir.mkdir(exist_ok=True)
 
-    log(f"Loading stage1 dataset from {dataset_csv.name}")
-    df = pd.read_csv(dataset_csv)
-    df["event_id"] = df["event_id"].astype(str)
-    if "geology" in df.columns:
-        df["geology"] = df["geology"].astype(str)
-    if "landcover_class" in df.columns:
-        df["landcover_class"] = df["landcover_class"].astype(str)
+    csv_dtypes = infer_csv_dtypes(dataset_csv)
+    header_cols = pd.read_csv(dataset_csv, nrows=0).columns.tolist()
+    all_events = sorted(pd.read_csv(dataset_csv, usecols=["event_id"], dtype={"event_id": "string"})["event_id"].astype(str).unique().tolist())
+    train_events = [e for e in (config.stage1_train_events or [e for e in all_events if e not in config.stage1_val_events and e not in config.stage1_test_events]) if e in all_events]
+    val_events = [e for e in config.stage1_val_events if e in all_events]
+    test_events = [e for e in config.stage1_test_events if e in all_events]
+    if not train_events or not val_events or not test_events:
+        raise ValueError("Training, validation, and testing event selections must all contain at least one valid event.")
 
-    all_events = sorted(df["event_id"].unique().tolist())
-    train_events = config.stage1_train_events or [e for e in all_events if e not in config.stage1_test_events and e not in config.stage1_val_events]
-    train_events = [e for e in train_events if e in all_events]
-    train_df = df[df["event_id"].isin(train_events)].copy()
-    val_df = df[df["event_id"].isin(config.stage1_val_events)].copy()
-    test_df = df[df["event_id"].isin(config.stage1_test_events)].copy()
-    if len(train_df) == 0:
-        raise ValueError("No training rows remain after selecting validation and test events.")
-    if len(val_df) == 0:
-        raise ValueError("No validation rows found for selected validation events.")
-    if len(test_df) == 0:
-        raise ValueError("No testing rows found for selected test events.")
-    log(f"Stage 1 splits | train events: {train_events} | val events: {config.stage1_val_events} | test events: {config.stage1_test_events}")
+    log(f"Loading machine learning dataset from {dataset_csv.name} using memory-safe sampling")
+    train_df = load_sampled_split(dataset_csv, train_events, csv_dtypes, max_rows=80000, seed=config.random_seed, log=log, label="Stage 1 training")
+    val_df = load_sampled_split(dataset_csv, val_events, csv_dtypes, max_rows=30000, seed=config.random_seed + 1, log=log, label="Stage 1 validation")
+    test_df = load_sampled_split(dataset_csv, test_events, csv_dtypes, max_rows=30000, seed=config.random_seed + 2, log=log, label="Stage 1 testing")
+    if train_df.empty or val_df.empty or test_df.empty:
+        raise ValueError("One of the Stage 1 splits is empty after loading the dataset.")
+    cleanup_frame(train_df); cleanup_frame(val_df); cleanup_frame(test_df)
 
     exclude = {"grid_id", "event_id", "pof_form", "label", "base_logit"}
-    cat_features = [c for c in ["geology", "landcover_class"] if c in df.columns]
-    num_features = [c for c in df.columns if c not in exclude and c not in cat_features]
+    cat_features = [c for c in ["geology", "landcover_class"] if c in header_cols]
+    num_features = [c for c in header_cols if c not in exclude and c not in cat_features]
 
     stage1_preprocessor = ColumnTransformer(
-        transformers=[("num", StandardScaler(), num_features)] + ([ ("cat", make_onehot(), cat_features) ] if cat_features else []),
+        transformers=[("num", StandardScaler(), num_features)] + ([("cat", make_onehot(), cat_features)] if cat_features else []),
         remainder="drop",
     )
     X_train = stage1_preprocessor.fit_transform(train_df).astype(np.float32)
@@ -379,17 +439,25 @@ def run_ml_pipeline(
     y_train = train_df["pof_form"].values.astype(np.float32).reshape(-1, 1)
     y_val = val_df["pof_form"].values.astype(np.float32).reshape(-1, 1)
     y_test = test_df["pof_form"].values.astype(np.float32).reshape(-1, 1)
+    del train_df, val_df
 
-    train_loader = DataLoader(TensorDataset(torch.tensor(X_train), torch.tensor(y_train)), batch_size=config.batch_size_stage1, shuffle=True)
-    val_loader = DataLoader(TensorDataset(torch.tensor(X_val), torch.tensor(y_val)), batch_size=config.batch_size_stage1, shuffle=False)
-    test_loader = DataLoader(TensorDataset(torch.tensor(X_test), torch.tensor(y_test)), batch_size=config.batch_size_stage1, shuffle=False)
+    bs1 = max(256, min(int(config.batch_size_stage1), 2048))
+    bs2 = max(128, min(int(config.batch_size_stage2), 1024))
+    if bs1 != int(config.batch_size_stage1):
+        log(f"Stage 1 batch size adjusted from {config.batch_size_stage1} to {bs1} for memory safety")
+    if bs2 != int(config.batch_size_stage2):
+        log(f"Stage 2 batch size adjusted from {config.batch_size_stage2} to {bs2} for memory safety")
+
+    train_loader = DataLoader(TensorDataset(torch.from_numpy(X_train), torch.from_numpy(y_train)), batch_size=bs1, shuffle=True)
+    val_loader = DataLoader(TensorDataset(torch.from_numpy(X_val), torch.from_numpy(y_val)), batch_size=bs1, shuffle=False)
+    test_loader = DataLoader(TensorDataset(torch.from_numpy(X_test), torch.from_numpy(y_test)), batch_size=bs1, shuffle=False)
 
     base_model = BaseNet(X_train.shape[1]).to(DEVICE)
     optimizer1 = torch.optim.Adam(base_model.parameters(), lr=config.lr_stage1, weight_decay=config.weight_decay)
     criterion1 = nn.BCEWithLogitsLoss()
     stopper1 = EarlyStopping(config.patience_stage1, config.min_delta)
     train_losses_s1, val_losses_s1 = [], []
-    log(f"Training Stage 1 on {len(train_df):,} rows using {X_train.shape[1]} input features")
+    log(f"Training Stage 1 on {len(X_train):,} sampled rows using {X_train.shape[1]} encoded features")
     for epoch in range(config.epochs_stage1):
         train_loss = train_epoch_stage1(base_model, train_loader, optimizer1, criterion1)
         val_loss, _, _ = eval_epoch_stage1(base_model, val_loader, criterion1)
@@ -406,6 +474,7 @@ def run_ml_pipeline(
 
     _, s1_test_pred, s1_test_true = eval_epoch_stage1(base_model, test_loader, criterion1)
     stage1_mae = float(np.mean(np.abs(s1_test_pred - s1_test_true)))
+    del X_train, X_val, y_train, y_val, train_loader, val_loader
 
     stage2_loss_png = plot_dir / "stage2_loss.png"
     roc_png = plot_dir / "roc_curve.png"
@@ -415,36 +484,36 @@ def run_ml_pipeline(
 
     plot_files = {"stage1_loss.png": stage1_loss_png}
     output_files: Dict[str, Path] = {prediction_csv.name: prediction_csv, metrics_txt.name: metrics_txt}
-
-    ref_arr, ref_meta = read_asc(reference_asc)
+    _, ref_meta = read_asc(reference_asc)
     output_meta = ref_meta.copy(); output_meta["nodata_value"] = -9999.0
     donut_records = []
-
     stage2_summary = {}
-    stage2_enabled_and_ready = config.stage2_enabled and bool(config.stage2_event) and label_asc is not None
     residual_model = None
     stage2_preprocessor = None
+    stage2_num_features = None
+    stage2_cat_features = None
 
+    stage2_enabled_and_ready = config.stage2_enabled and bool(config.stage2_event) and label_asc is not None
     if stage2_enabled_and_ready:
         label_arr, label_meta = read_asc(label_asc)
         label_flat = label_arr.ravel(); label_nodata = label_meta["nodata_value"]
-        s2_df = df[df["event_id"] == str(config.stage2_event)].copy()
-        if len(s2_df) == 0:
+        s2_df = load_sampled_split(dataset_csv, [str(config.stage2_event)], csv_dtypes, max_rows=60000, seed=config.random_seed + 3, log=log, label=f"Stage 2 event {config.stage2_event}")
+        if s2_df.empty:
             raise ValueError(f"Stage 2 event {config.stage2_event} not found in dataset.")
-        s2_df["label"] = label_flat[s2_df["grid_id"].values]
+        cleanup_frame(s2_df)
+        s2_df["label"] = label_flat[s2_df["grid_id"].astype(np.int64).values]
         s2_df = s2_df[s2_df["label"] != label_nodata].copy()
-        s2_df["label"] = s2_df["label"].astype(int)
+        s2_df["label"] = s2_df["label"].astype(np.int16)
         if s2_df["label"].nunique() < 2:
             raise ValueError("Stage 2 label map does not contain at least two classes after masking nodata.")
         X_full_base = stage1_preprocessor.transform(s2_df).astype(np.float32)
-        d1_full, base_prob_full = predict_stage1(base_model, X_full_base)
-        s2_df["base_logit"] = d1_full
+        d1_full, _base_prob_full = predict_stage1(base_model, X_full_base)
+        s2_df["base_logit"] = d1_full.astype(np.float32)
         s2_train_df, s2_val_df, s2_test_df = stratified_split_single_event(s2_df, "label", config.stage2_train_frac, config.stage2_val_frac, config.stage2_test_frac, seed=config.random_seed)
-
-        s2_cat_features = cat_features[:]
-        s2_num_features = [c for c in s2_df.columns if c not in {"grid_id", "event_id", "pof_form", "label"} and c not in s2_cat_features]
+        stage2_cat_features = cat_features[:]
+        stage2_num_features = [c for c in s2_df.columns if c not in {"grid_id", "event_id", "pof_form", "label"} and c not in stage2_cat_features]
         stage2_preprocessor = ColumnTransformer(
-            transformers=[("num", StandardScaler(), s2_num_features)] + ([ ("cat", make_onehot(), s2_cat_features) ] if s2_cat_features else []),
+            transformers=[("num", StandardScaler(), stage2_num_features)] + ([("cat", make_onehot(), stage2_cat_features)] if stage2_cat_features else []),
             remainder="drop",
         )
         X_train_base = stage1_preprocessor.transform(s2_train_df).astype(np.float32)
@@ -456,9 +525,9 @@ def run_ml_pipeline(
         y_train_s2 = s2_train_df["label"].values.astype(np.float32).reshape(-1, 1)
         y_val_s2 = s2_val_df["label"].values.astype(np.float32).reshape(-1, 1)
         y_test_s2 = s2_test_df["label"].values.astype(np.float32).reshape(-1, 1)
-        train_loader_s2 = DataLoader(TensorDataset(torch.tensor(X_train_base), torch.tensor(X_train_res), torch.tensor(y_train_s2)), batch_size=config.batch_size_stage2, shuffle=True)
-        val_loader_s2 = DataLoader(TensorDataset(torch.tensor(X_val_base), torch.tensor(X_val_res), torch.tensor(y_val_s2)), batch_size=config.batch_size_stage2, shuffle=False)
-        test_loader_s2 = DataLoader(TensorDataset(torch.tensor(X_test_base), torch.tensor(X_test_res), torch.tensor(y_test_s2)), batch_size=config.batch_size_stage2, shuffle=False)
+        train_loader_s2 = DataLoader(TensorDataset(torch.from_numpy(X_train_base), torch.from_numpy(X_train_res), torch.from_numpy(y_train_s2)), batch_size=bs2, shuffle=True)
+        val_loader_s2 = DataLoader(TensorDataset(torch.from_numpy(X_val_base), torch.from_numpy(X_val_res), torch.from_numpy(y_val_s2)), batch_size=bs2, shuffle=False)
+        test_loader_s2 = DataLoader(TensorDataset(torch.from_numpy(X_test_base), torch.from_numpy(X_test_res), torch.from_numpy(y_test_s2)), batch_size=bs2, shuffle=False)
         for p in base_model.parameters():
             p.requires_grad = False
         n_pos = float(np.sum(y_train_s2)); n_neg = float(len(y_train_s2) - n_pos)
@@ -468,7 +537,7 @@ def run_ml_pipeline(
         criterion2 = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight], dtype=torch.float32).to(DEVICE))
         stopper2 = EarlyStopping(config.patience_stage2, config.min_delta)
         train_losses_s2, val_losses_s2 = [], []
-        log(f"Training Stage 2 on event {config.stage2_event} with {len(s2_train_df):,} train rows")
+        log(f"Training Stage 2 on sampled event rows for {config.stage2_event}")
         for epoch in range(config.epochs_stage2):
             train_loss = train_epoch_stage2(base_model, residual_model, train_loader_s2, optimizer2, criterion2)
             val_loss, _, _, _ = eval_epoch_stage2(base_model, residual_model, val_loader_s2, criterion2)
@@ -493,6 +562,8 @@ def run_ml_pipeline(
             "stage2_roc_auc": float(roc_auc_score(s2_test_true, s2_test_final_prob)),
         }
         log(f"Stage 2 completed with ROC AUC = {stage2_summary['stage2_roc_auc']:.4f}")
+        del s2_df, s2_train_df, s2_val_df, s2_test_df, X_full_base, X_train_base, X_val_base, X_test_base, X_train_res, X_val_res, X_test_res
+        del y_train_s2, y_val_s2, y_test_s2, train_loader_s2, val_loader_s2, test_loader_s2
     else:
         plot_message(stage2_loss_png, "Stage 2 not active", "Stage 2 training was disabled or label input was not provided.")
         plot_message(roc_png, "ROC not available", "ROC requires an active Stage 2 event with landslide_label.asc.")
@@ -500,48 +571,58 @@ def run_ml_pipeline(
         plot_files[roc_png.name] = roc_png
 
     metrics_lines = []
-    prediction_rows = []
-    for event_id in config.stage1_test_events:
-        event_df = df[df["event_id"] == event_id].copy()
-        if len(event_df) == 0:
+    first_pred_write = True
+    for event_id in test_events:
+        geotop_grid = np.full(output_meta["nrows"] * output_meta["ncols"], output_meta["nodata_value"], dtype=np.float32)
+        stage1_grid = np.full_like(geotop_grid, output_meta["nodata_value"])
+        stage2_grid = np.full_like(geotop_grid, output_meta["nodata_value"]) if residual_model is not None and stage2_preprocessor is not None else None
+        probs_geo_parts = []
+        probs_s1_parts = []
+        probs_s2_parts = []
+        for event_chunk in chunk_reader_for_events(dataset_csv, [event_id], csv_dtypes):
+            cleanup_frame(event_chunk)
+            X_event_base = stage1_preprocessor.transform(event_chunk).astype(np.float32)
+            base_logits, stage1_prob = predict_stage1(base_model, X_event_base)
+            grid_ids = event_chunk["grid_id"].astype(np.int64).values
+            geotop_prob = event_chunk["pof_form"].values.astype(np.float32)
+            geotop_grid[grid_ids] = geotop_prob
+            stage1_grid[grid_ids] = stage1_prob.astype(np.float32)
+            event_chunk["stage1_base_prob"] = stage1_prob.astype(np.float32)
+            event_chunk["stage1_base_logit"] = base_logits.astype(np.float32)
+            probs_geo_parts.append(geotop_prob)
+            probs_s1_parts.append(stage1_prob.astype(np.float32))
+            if stage2_grid is not None:
+                event_chunk["base_logit"] = base_logits.astype(np.float32)
+                X_event_res = stage2_preprocessor.transform(event_chunk).astype(np.float32)
+                _, _, _, stage2_prob = predict_stage2(base_model, residual_model, X_event_base, X_event_res)
+                stage2_grid[grid_ids] = stage2_prob.astype(np.float32)
+                event_chunk["stage2_final_prob"] = stage2_prob.astype(np.float32)
+                probs_s2_parts.append(stage2_prob.astype(np.float32))
+            event_chunk.to_csv(prediction_csv, mode='w' if first_pred_write else 'a', header=first_pred_write, index=False)
+            first_pred_write = False
+        if not probs_geo_parts:
             continue
-        X_event_base = stage1_preprocessor.transform(event_df).astype(np.float32)
-        base_logits, stage1_prob = predict_stage1(base_model, X_event_base)
-        event_df["stage1_base_prob"] = stage1_prob
-        event_df["stage1_base_logit"] = base_logits
-        geotop_prob = event_df["pof_form"].values.astype(float)
-        ring_data = [("GeoTOP-FORM", compute_pof_proportions(geotop_prob)), ("Stage 1", compute_pof_proportions(stage1_prob))]
-
-        geotop_grid = make_grid_from_values(event_df["grid_id"].values, geotop_prob, output_meta)
-        stage1_grid = make_grid_from_values(event_df["grid_id"].values, stage1_prob, output_meta)
+        geotop_prob_all = np.concatenate(probs_geo_parts)
+        stage1_prob_all = np.concatenate(probs_s1_parts)
+        ring_data = [("GeoTOP-FORM", compute_pof_proportions(geotop_prob_all)), ("Stage 1", compute_pof_proportions(stage1_prob_all))]
         geotop_out = map_dir / f"geotop_form_pof_{event_id}.asc"
         stage1_out = map_dir / f"stage1_base_prob_{event_id}.asc"
-        write_asc(geotop_out, geotop_grid, output_meta)
-        write_asc(stage1_out, stage1_grid, output_meta)
+        write_asc(geotop_out, geotop_grid.reshape((output_meta['nrows'], output_meta['ncols'])), output_meta)
+        write_asc(stage1_out, stage1_grid.reshape((output_meta['nrows'], output_meta['ncols'])), output_meta)
         output_files[geotop_out.name] = geotop_out
         output_files[stage1_out.name] = stage1_out
-        metrics_lines.append(f"Event {event_id}: Stage 1 mean prob={float(np.mean(stage1_prob)):.4f}")
-
-        if residual_model is not None and stage2_preprocessor is not None:
-            event_df["base_logit"] = base_logits
-            X_event_res = stage2_preprocessor.transform(event_df).astype(np.float32)
-            _, _, _, stage2_prob = predict_stage2(base_model, residual_model, X_event_base, X_event_res)
-            event_df["stage2_final_prob"] = stage2_prob
-            stage2_grid = make_grid_from_values(event_df["grid_id"].values, stage2_prob, output_meta)
+        metrics_lines.append(f"Event {event_id}: Stage 1 mean prob={float(np.mean(stage1_prob_all)):.4f}")
+        if stage2_grid is not None and probs_s2_parts:
+            stage2_prob_all = np.concatenate(probs_s2_parts)
             stage2_out = map_dir / f"stage2_final_prob_{event_id}.asc"
-            write_asc(stage2_out, stage2_grid, output_meta)
+            write_asc(stage2_out, stage2_grid.reshape((output_meta['nrows'], output_meta['ncols'])), output_meta)
             output_files[stage2_out.name] = stage2_out
-            ring_data.append(("Stage 2", compute_pof_proportions(stage2_prob)))
-            metrics_lines.append(f"Event {event_id}: Stage 2 mean prob={float(np.mean(stage2_prob)):.4f}")
-
-        prediction_rows.append(event_df)
+            ring_data.append(("Stage 2", compute_pof_proportions(stage2_prob_all)))
+            metrics_lines.append(f"Event {event_id}: Stage 2 mean prob={float(np.mean(stage2_prob_all)):.4f}")
         donut_records.append({"event_id": event_id, "rings": ring_data})
 
-    if prediction_rows:
-        pd.concat(prediction_rows, ignore_index=True).to_csv(prediction_csv, index=False)
-    else:
+    if first_pred_write:
         pd.DataFrame().to_csv(prediction_csv, index=False)
-
     draw_combined_donut_panel(donut_records, donut_png)
     plot_files[donut_png.name] = donut_png
     output_files[prediction_csv.name] = prediction_csv
@@ -551,25 +632,25 @@ def run_ml_pipeline(
         f.write("=" * 60 + "\n")
         f.write(f"Device: {DEVICE}\n")
         f.write(f"Train events: {train_events}\n")
-        f.write(f"Val events: {config.stage1_val_events}\n")
-        f.write(f"Test events: {config.stage1_test_events}\n")
-        f.write(f"Stage 1 MAE (soft labels on test): {stage1_mae:.6f}\n")
+        f.write(f"Val events: {val_events}\n")
+        f.write(f"Test events: {test_events}\n")
+        f.write(f"Stage 1 MAE (soft labels on sampled test rows): {stage1_mae:.6f}\n")
         for line in metrics_lines:
             f.write(line + "\n")
         if stage2_summary:
             f.write(json.dumps(stage2_summary, indent=2) + "\n")
         else:
             f.write("Stage 2 was disabled or not configured.\n")
-    output_files[metrics_txt.name] = metrics_txt
 
     summary = {
         "device": DEVICE,
         "stage1_train_events": train_events,
-        "stage1_val_events": config.stage1_val_events,
-        "stage1_test_events": config.stage1_test_events,
+        "stage1_val_events": val_events,
+        "stage1_test_events": test_events,
         "stage1_feature_count": len(num_features) + len(cat_features),
         "stage1_softlabel_mae": stage1_mae,
         "stage2_enabled": bool(stage2_enabled_and_ready),
+        "memory_strategy": "chunked_load_with_sampling",
         **stage2_summary,
     }
     return MLResult(summary=summary, output_files=output_files, plot_files=plot_files)

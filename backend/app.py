@@ -289,14 +289,21 @@ async def run_ml(
         try:
             JOBS[job_id]["status"] = "running"
             append_log(job_id, "Machine learning training started")
+            dataset_csv_path = Path(prep_job["dataset_csv"])
             result = run_ml_pipeline(
-                dataset_csv=Path(prep_job["dataset_csv"]),
+                dataset_csv=dataset_csv_path,
                 reference_asc=Path(prep_job["reference_asc"]),
                 config=config,
                 output_dir=output_dir,
                 label_asc=label_path,
                 log=lambda m: append_log(job_id, m),
             )
+            if dataset_csv_path.exists():
+                try:
+                    dataset_csv_path.unlink()
+                    append_log(job_id, "Removed temporary stage1_base_dataset.csv after ML load to save storage")
+                except Exception:
+                    pass
             JOBS[job_id]["outputs"] = {name: f"/api/jobs/{job_id}/download/{name}" for name in result.output_files.keys()}
             JOBS[job_id]["plots"] = {name: f"/api/jobs/{job_id}/download/{name}" for name in result.plot_files.keys()}
             JOBS[job_id]["summary"] = result.summary

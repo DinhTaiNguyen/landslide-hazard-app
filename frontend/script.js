@@ -220,6 +220,12 @@
     if (sourceCRS === 'EPSG:4326' || sourceCRS === 'EPSG:4490') return [x, y];
     return proj4(sourceCRS, 'EPSG:4326', [x, y]);
   }
+  function getEffectivePreviewCRS(ascLike = null) {
+    const selected = crsSelect && crsSelect.value ? crsSelect.value : 'EPSG:4549';
+    if (selected && selected !== 'auto') return selected;
+    if (ascLike && ascLooksGeographic(ascLike)) return 'EPSG:4326';
+    return 'EPSG:4549';
+  }
   function fallbackBounds() {
     return [[defaultMapView.center[0] - 0.08, defaultMapView.center[1] - 0.08], [defaultMapView.center[0] + 0.08, defaultMapView.center[1] + 0.08]];
   }
@@ -227,8 +233,9 @@
   function ascBoundsToLatLngBounds(asc, selectedCRS) {
     const xMin = asc.xll, yMin = asc.yll, xMax = asc.xll + asc.width * asc.cellsize, yMax = asc.yll + asc.height * asc.cellsize;
     try {
-      if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) return [[yMin, xMin], [yMax, xMax]];
-      const ll = transformPointToWGS84(xMin, yMin, selectedCRS); const ur = transformPointToWGS84(xMax, yMax, selectedCRS);
+      const effectiveCRS = selectedCRS === 'auto' ? getEffectivePreviewCRS(asc) : selectedCRS;
+      if (effectiveCRS === 'EPSG:4326' || effectiveCRS === 'EPSG:4490') return [[yMin, xMin], [yMax, xMax]];
+      const ll = transformPointToWGS84(xMin, yMin, effectiveCRS); const ur = transformPointToWGS84(xMax, yMax, effectiveCRS);
       if (![ll[0], ll[1], ur[0], ur[1]].every(Number.isFinite)) throw new Error('Invalid transformed bounds');
       return [[ll[1], ll[0]], [ur[1], ur[0]]];
     } catch (err) {
@@ -295,8 +302,9 @@
       if (bbox && bbox.length === 4) {
         if (bbox[0] >= -180 && bbox[2] <= 180 && bbox[1] >= -90 && bbox[3] <= 90) bounds = [[bbox[1], bbox[0]], [bbox[3], bbox[2]]];
         else if (typeof proj4 !== 'undefined') {
-          const ll = transformPointToWGS84(bbox[0], bbox[1], crsSelect.value || 'EPSG:4549');
-          const ur = transformPointToWGS84(bbox[2], bbox[3], crsSelect.value || 'EPSG:4549');
+          const effectiveCRS = getEffectivePreviewCRS();
+          const ll = transformPointToWGS84(bbox[0], bbox[1], effectiveCRS);
+          const ur = transformPointToWGS84(bbox[2], bbox[3], effectiveCRS);
           if ([ll[0], ll[1], ur[0], ur[1]].every(Number.isFinite)) bounds = [[ll[1], ll[0]], [ur[1], ur[0]]];
         }
       }
