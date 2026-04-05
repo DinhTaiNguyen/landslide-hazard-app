@@ -251,6 +251,7 @@ async def run_ml(
         raise HTTPException(status_code=400, detail=f"Invalid config_json: {exc}")
 
     config = MLConfig(
+        stage1_train_events=[str(x) for x in payload.get("stage1_train_events", [])],
         stage1_test_events=[str(x) for x in payload.get("stage1_test_events", [])],
         stage1_val_events=[str(x) for x in payload.get("stage1_val_events", [])],
         stage2_enabled=bool(payload.get("stage2_enabled", True)),

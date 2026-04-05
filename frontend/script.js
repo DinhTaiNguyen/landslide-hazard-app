@@ -28,6 +28,7 @@
   const mlFormOutputsSummary = document.getElementById('mlFormOutputsSummary');
   const mlDetectedEventsBox = document.getElementById('mlDetectedEventsBox');
   const rainfallEventContainer = document.getElementById('rainfallEventContainer');
+  const stage1TrainEventsBox = document.getElementById('stage1TrainEventsBox');
   const stage1TestEventsBox = document.getElementById('stage1TestEventsBox');
   const stage1ValEventsBox = document.getElementById('stage1ValEventsBox');
   const stage2EnabledInput = document.getElementById('stage2EnabledInput');
@@ -236,6 +237,23 @@
     updateColorbar(stats.min, stats.max);
   }
 
+  function getSafeFileName(file, fallback = 'uploaded_file') {
+    if (!file) return fallback;
+    return file.name || (file.webkitRelativePath ? file.webkitRelativePath.split('/').pop() : '') || file.webkitRelativePath || fallback;
+  }
+
+  function removeLayerByKey(layerKey) {
+    if (rasterLayers[layerKey] && rasterLayers[layerKey].layer && map.hasLayer(rasterLayers[layerKey].layer)) {
+      map.removeLayer(rasterLayers[layerKey].layer);
+    }
+    delete rasterLayers[layerKey];
+    if (!Object.keys(rasterLayers).length) {
+      mapEmptyNote.style.display = 'block';
+      clearColorbar();
+      rasterStats.textContent = 'No raster loaded';
+    }
+  }
+
   function addAscLayerFromParsed(asc, fileName, layerKey, layerLabel) {
     const canvas = renderGridToCanvas(asc.width, asc.height, asc.grid, asc.min, asc.max);
     const bounds = ascBoundsToLatLngBounds(asc, crsSelect.value || 'auto');
@@ -245,10 +263,56 @@
     return overlay;
   }
 
+  async function addTiffLayer(file, layerKey, layerLabel) {
+    const buffer = await file.arrayBuffer();
+    const tiff = await GeoTIFF.fromArrayBuffer(buffer);
+    const image = await tiff.getImage();
+    const width = image.getWidth();
+    const height = image.getHeight();
+    const rasters = await image.readRasters();
+    const grid = rasters[0];
+    let min = Infinity; let max = -Infinity;
+    for (let i = 0; i < grid.length; i++) {
+      const v = grid[i];
+      if (!Number.isFinite(v)) continue;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    const canvas = renderGridToCanvas(width, height, grid, min, max);
+    let bounds = [[29.60, 119.85], [29.85, 120.10]];
+    try {
+      const bbox = image.getBoundingBox();
+      if (bbox && bbox.length === 4) {
+        if (bbox[0] >= -180 && bbox[2] <= 180 && bbox[1] >= -90 && bbox[3] <= 90) bounds = [[bbox[1], bbox[0]], [bbox[3], bbox[2]]];
+        else if (typeof proj4 !== 'undefined') {
+          const ll = transformPointToWGS84(bbox[0], bbox[1], crsSelect.value || 'EPSG:4549');
+          const ur = transformPointToWGS84(bbox[2], bbox[3], crsSelect.value || 'EPSG:4549');
+          bounds = [[ll[1], ll[0]], [ur[1], ur[0]]];
+        }
+      }
+    } catch (err) {}
+    const overlay = L.imageOverlay(canvas.toDataURL('image/png'), bounds, { opacity: 0.9 }).addTo(map);
+    registerLayer(layerKey, layerLabel, overlay, bounds, { min, max, width, height });
+    uploadStatus.textContent = `Loaded ${getSafeFileName(file)}`;
+    return overlay;
+  }
+
+  async function displayRasterFile(file, layerKey, layerLabel) {
+    const name = getSafeFileName(file);
+    const ext = name.split('.').pop().toLowerCase();
+    if (ext === 'asc') {
+      const text = await file.text();
+      const asc = parseAsc(text);
+      return addAscLayerFromParsed(asc, name, layerKey, layerLabel || name);
+    }
+    if (ext === 'tif' || ext === 'tiff') {
+      return addTiffLayer(file, layerKey, layerLabel || name);
+    }
+    throw new Error(`Unsupported raster type: ${ext}`);
+  }
+
   async function displayAscFile(file, layerKey, layerLabel) {
-    const text = await file.text();
-    const asc = parseAsc(text);
-    addAscLayerFromParsed(asc, file.name, layerKey, layerLabel);
+    return displayRasterFile(file, layerKey, layerLabel);
   }
 
   async function displayAscUrl(url, layerKey, layerLabel) {
@@ -264,7 +328,7 @@
 
   function updateInputSummary() {
     const summary = [];
-    ['dem','slope','soilType','soilThickness'].forEach(key => { if (state.formInputs[key]) summary.push(`${key}: ${state.formInputs[key].name}`); });
+    ['dem','slope','soilType','soilThickness'].forEach(key => { if (state.formInputs[key]) summary.push(`${key}: ${getSafeFileName(state.formInputs[key], key)}`); });
     summary.push(`FORM GeoTOP boxes: ${state.geotopCards.length}`);
     if (state.ml.mapFiles.length) summary.push(`ML maps uploaded: ${state.ml.mapFiles.length}`);
     if (state.ml.formOutputFiles.length) summary.push(`ML FORM files uploaded: ${state.ml.formOutputFiles.length}`);
@@ -432,9 +496,8 @@
       checkbox.addEventListener('change', async () => {
         if (checkbox.checked) {
           await displayAscUrl(downloadUrl, layerKey, name);
-        } else if (rasterLayers[layerKey] && map.hasLayer(rasterLayers[layerKey].layer)) {
-          map.removeLayer(rasterLayers[layerKey].layer);
-          delete rasterLayers[layerKey];
+        } else {
+          removeLayerByKey(layerKey);
         }
       });
       container.appendChild(row);
@@ -462,6 +525,7 @@
     const events = state.ml.detectedEvents.slice();
     const previousTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
     const previousVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    const previousTrain = new Set(Array.from(stage1TrainEventsBox.querySelectorAll('input:checked')).map(i => i.value));
 
     stage1TestEventsBox.innerHTML = '';
     events.forEach((eventId, idx) => {
@@ -474,8 +538,9 @@
 
     const checkedTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
     stage1ValEventsBox.innerHTML = '';
-    events.filter(e => !checkedTest.has(e)).forEach(eventId => {
-      const checked = previousVal.has(eventId);
+    events.filter(e => !checkedTest.has(e)).forEach((eventId, idx) => {
+      const defaultChecked = idx < Math.min(2, Math.max(events.length - checkedTest.size, 0));
+      const checked = previousVal.size ? previousVal.has(eventId) : defaultChecked;
       const label = document.createElement('label');
       label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
       label.querySelector('input').addEventListener('change', updateStageEventSelectors);
@@ -483,8 +548,20 @@
     });
 
     const checkedVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
-    const remainingForStage2 = events.filter(e => !checkedTest.has(e) && !checkedVal.has(e));
+    const remainingForTrain = events.filter(e => !checkedTest.has(e) && !checkedVal.has(e));
+    stage1TrainEventsBox.innerHTML = '';
+    remainingForTrain.forEach(eventId => {
+      const checked = previousTrain.size ? previousTrain.has(eventId) : true;
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
+      label.querySelector('input').addEventListener('change', updateStageEventSelectors);
+      stage1TrainEventsBox.appendChild(label);
+    });
+
+    const checkedTrain = new Set(Array.from(stage1TrainEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    const remainingForStage2 = events.filter(e => !checkedTest.has(e) && !checkedVal.has(e) && !checkedTrain.has(e));
     stage2EventSelect.innerHTML = remainingForStage2.map(e => `<option value="${e}">${e}</option>`).join('');
+    if (!remainingForStage2.length) stage2EventSelect.innerHTML = '<option value=>No remaining event</option>';
   }
 
   function renderStageEventBoxes() {
@@ -515,23 +592,22 @@
   function renderMlMapLayerControls() {
     mlMapLayersList.innerHTML = '';
     if (!state.ml.mapFiles.length) {
-      mlMapLayersList.innerHTML = '<div class="summary-box">No ASC maps detected yet.</div>';
+      mlMapLayersList.innerHTML = '<div class="summary-box">No raster maps detected yet.</div>';
       return;
     }
     state.ml.mapFiles.forEach((file, idx) => {
-      const displayName = file.webkitRelativePath || file.name || `map_${idx + 1}.asc`;
+      const displayName = file.webkitRelativePath || getSafeFileName(file, `map_${idx + 1}.asc`);
       const row = document.createElement('div'); row.className = 'layer-row';
       row.innerHTML = `<span>${displayName}</span><div class="layer-actions"><label><input type="checkbox"/> View</label></div>`;
       const checkbox = row.querySelector('input');
-      const key = `ml_map_${idx}_${(file.name || `map_${idx}`).replace(/[^a-zA-Z0-9_\-.]/g, '_')}`;
+      const key = `ml_map_${idx}_${getSafeFileName(file, `map_${idx}`).replace(/[^a-zA-Z0-9_\-.]/g, '_')}`;
       checkbox.addEventListener('change', async () => {
         try {
           if (checkbox.checked) {
             await displayAscFile(file, key, displayName);
             addConsoleLine(mlConsoleContent, 'info', `Displayed ML map: ${displayName}`);
-          } else if (rasterLayers[key] && map.hasLayer(rasterLayers[key].layer)) {
-            map.removeLayer(rasterLayers[key].layer);
-            delete rasterLayers[key];
+          } else {
+            removeLayerByKey(key);
           }
         } catch (err) {
           checkbox.checked = false;
@@ -596,10 +672,12 @@
   function collectMlConfig() {
     const params = {};
     mlHyperparametersGrid.querySelectorAll('[data-ml-param]').forEach(input => { params[input.dataset.mlParam] = parseFloat(input.value); });
+    const trainEvents = Array.from(stage1TrainEventsBox.querySelectorAll('input:checked')).map(i => i.value);
     const testEvents = Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value);
     const valEvents = Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value);
     return {
       ...params,
+      stage1_train_events: trainEvents,
       stage1_test_events: testEvents,
       stage1_val_events: valEvents,
       stage2_enabled: stage2EnabledInput.checked,
@@ -644,7 +722,7 @@
       const checkbox = row.querySelector('input');
       checkbox.addEventListener('change', async () => {
         if (checkbox.checked) await displayAscUrl(fullUrl, key, name);
-        else if (rasterLayers[key] && map.hasLayer(rasterLayers[key].layer)) { map.removeLayer(rasterLayers[key].layer); delete rasterLayers[key]; }
+        else removeLayerByKey(key);
       });
       mlResultLayersList.appendChild(row);
       if (checkbox.checked) displayAscUrl(fullUrl, key, name).catch(() => {});
@@ -664,10 +742,10 @@
   function onRasterSelected(key, file) {
     state.formInputs[key] = file;
     const configKey = key === 'soilType' ? 'soilType' : key === 'soilThickness' ? 'soilThickness' : key;
-    rasterConfigs[configKey].selectedFile.textContent = (file && (file.name || file.webkitRelativePath)) ? (file.name || file.webkitRelativePath) : 'None';
+    rasterConfigs[configKey].selectedFile.textContent = file ? getSafeFileName(file, key) : 'None';
     rasterConfigs[configKey].viewToggle.disabled = !file;
     rasterConfigs[configKey].viewToggle.checked = !!file;
-    if (file) displayAscFile(file, `base_${key}`, file.name || key).catch(err => { addConsoleLine(consoleContent, 'err', `Failed to load ${file.name || key}: ${err.message}`); setStatus(uploadStatus, `Failed to load ${file.name || key}`); });
+    if (file) displayRasterFile(file, `base_${key}`, getSafeFileName(file, key)).catch(err => { addConsoleLine(consoleContent, 'err', `Failed to load ${getSafeFileName(file, key)}: ${err.message}`); setStatus(uploadStatus, `Failed to load ${getSafeFileName(file, key)}`); });
     updateInputSummary();
   }
 
@@ -680,19 +758,19 @@
       cfg.viewToggle.onchange = async () => {
         const layerKey = `base_${stateKey}`;
         try {
-          if (cfg.viewToggle.checked) await displayAscFile(file, layerKey, file.name || stateKey);
-          else if (rasterLayers[layerKey] && map.hasLayer(rasterLayers[layerKey].layer)) { map.removeLayer(rasterLayers[layerKey].layer); delete rasterLayers[layerKey]; }
+          if (cfg.viewToggle.checked) await displayRasterFile(file, layerKey, getSafeFileName(file, stateKey));
+          else removeLayerByKey(layerKey);
         } catch (err) {
           cfg.viewToggle.checked = false;
-          addConsoleLine(consoleContent, 'err', `Failed to display ${file.name || stateKey}: ${err.message}`);
+          addConsoleLine(consoleContent, 'err', `Failed to display ${getSafeFileName(file, stateKey)}: ${err.message}`);
         }
       };
     });
   });
 
   mlMapsFolderInput.addEventListener('change', () => {
-    state.ml.mapFiles = Array.from(mlMapsFolderInput.files || []).filter(f => /\.asc$/i.test(f.name));
-    mlMapsSummary.textContent = state.ml.mapFiles.length ? `${state.ml.mapFiles.length} ASC map files detected. First files: ${state.ml.mapFiles.slice(0,3).map(f => f.name || f.webkitRelativePath || 'unknown').join(', ')}${state.ml.mapFiles.length > 3 ? ' ...' : ''}` : 'No ASC map files detected.';
+    state.ml.mapFiles = Array.from(mlMapsFolderInput.files || []).filter(f => /\.(asc|tif|tiff)$/i.test(getSafeFileName(f)));
+    mlMapsSummary.textContent = state.ml.mapFiles.length ? `${state.ml.mapFiles.length} raster map files detected. First files: ${state.ml.mapFiles.slice(0,3).map(f => getSafeFileName(f, 'unknown')).join(', ')}${state.ml.mapFiles.length > 3 ? ' ...' : ''}` : 'No raster map files detected.';
     renderMlMapLayerControls();
     updateInputSummary();
   });
@@ -712,10 +790,10 @@
     landslideLabelSummary.textContent = state.ml.labelFile ? state.ml.labelFile.name : 'None';
     landslideLabelViewToggle.disabled = !state.ml.labelFile;
     landslideLabelViewToggle.checked = !!state.ml.labelFile;
-    if (state.ml.labelFile) displayAscFile(state.ml.labelFile, 'ml_label_map', state.ml.labelFile.name).catch(() => {});
+    if (state.ml.labelFile) displayRasterFile(state.ml.labelFile, 'ml_label_map', getSafeFileName(state.ml.labelFile, 'landslide_label.asc')).catch(() => {});
     landslideLabelViewToggle.onchange = async () => {
-      if (landslideLabelViewToggle.checked && state.ml.labelFile) await displayAscFile(state.ml.labelFile, 'ml_label_map', state.ml.labelFile.name);
-      else if (rasterLayers.ml_label_map && map.hasLayer(rasterLayers.ml_label_map.layer)) { map.removeLayer(rasterLayers.ml_label_map.layer); delete rasterLayers.ml_label_map; }
+      if (landslideLabelViewToggle.checked && state.ml.labelFile) await displayRasterFile(state.ml.labelFile, 'ml_label_map', getSafeFileName(state.ml.labelFile, 'landslide_label.asc'));
+      else removeLayerByKey('ml_label_map');
     };
   });
 

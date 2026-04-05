@@ -30,6 +30,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 @dataclass
 class MLConfig:
+    stage1_train_events: List[str]
     stage1_test_events: List[str]
     stage1_val_events: List[str]
     stage2_enabled: bool
@@ -351,7 +352,8 @@ def run_ml_pipeline(
         df["landcover_class"] = df["landcover_class"].astype(str)
 
     all_events = sorted(df["event_id"].unique().tolist())
-    train_events = [e for e in all_events if e not in config.stage1_test_events and e not in config.stage1_val_events]
+    train_events = config.stage1_train_events or [e for e in all_events if e not in config.stage1_test_events and e not in config.stage1_val_events]
+    train_events = [e for e in train_events if e in all_events]
     train_df = df[df["event_id"].isin(train_events)].copy()
     val_df = df[df["event_id"].isin(config.stage1_val_events)].copy()
     test_df = df[df["event_id"].isin(config.stage1_test_events)].copy()
