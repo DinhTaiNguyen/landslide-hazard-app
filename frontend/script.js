@@ -68,7 +68,9 @@
     proj4.defs('EPSG:4549', '+proj=tmerc +lat_0=0 +lon_0=120 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs +type=crs');
   }
 
-  function backendUrl() { return (backendUrlInput.value || defaultBackendUrl).replace(/\/$/, ''); }
+  function backendUrl() {
+    return (backendUrlInput.value || defaultBackendUrl).replace(/\/$/, '');
+  }
 
   function addConsoleLine(type, message) {
     const line = document.createElement('div');
@@ -78,7 +80,9 @@
     consoleContent.scrollTop = consoleContent.scrollHeight;
   }
 
-  function setStatus(message) { uploadStatus.textContent = message; }
+  function setStatus(message) {
+    uploadStatus.textContent = message;
+  }
 
   async function checkBackend() {
     backendStatus.textContent = 'Checking...';
@@ -109,14 +113,17 @@
     state.currentBaseLayer = L.tileLayer(cfg.url, cfg.options).addTo(state.map);
   }
 
-  function resetMapView() { if (state.map) state.map.setView(defaultMapView.center, defaultMapView.zoom); }
+  function resetMapView() {
+    if (state.map) state.map.setView(defaultMapView.center, defaultMapView.zoom);
+  }
 
   function clearAllLayers() {
     Object.keys(state.rasterLayers).forEach(key => {
       const item = state.rasterLayers[key];
       if (item.layer && state.map.hasLayer(item.layer)) state.map.removeLayer(item.layer);
+      if (item.viewToggleEl) item.viewToggleEl.checked = false;
+      item.visible = false;
     });
-    state.rasterLayers = {};
     state.activeLayerKey = null;
     mapEmptyNote.style.display = 'block';
     rasterStats.textContent = 'No active layer';
@@ -238,6 +245,17 @@
     colorbarPanel.style.display = 'block';
   }
 
+  function updateActiveLayerStats(item) {
+    if (!item) {
+      rasterStats.textContent = 'No active layer';
+      colorbarPanel.style.display = 'none';
+      return;
+    }
+    rasterStats.innerHTML = `Layer: ${item.label}<br>Min: ${item.min.toFixed(3)}<br>Max: ${item.max.toFixed(3)}<br>Size: ${item.width} × ${item.height}<br>CRS: ${item.crsText}`;
+    updateColorbar(item.min, item.max);
+    mapEmptyNote.style.display = 'none';
+  }
+
   function registerRasterLayer(layerKey, label, fileName, leafletLayer, bounds, stats, viewToggleEl) {
     if (state.rasterLayers[layerKey] && state.map.hasLayer(state.rasterLayers[layerKey].layer)) {
       state.map.removeLayer(state.rasterLayers[layerKey].layer);
@@ -261,9 +279,7 @@
       viewToggleEl.checked = true;
     }
     state.activeLayerKey = layerKey;
-    rasterStats.innerHTML = `Layer: ${label}<br>Min: ${stats.min.toFixed(3)}<br>Max: ${stats.max.toFixed(3)}<br>Size: ${stats.width} × ${stats.height}<br>CRS: ${stats.crsText}`;
-    updateColorbar(stats.min, stats.max);
-    mapEmptyNote.style.display = 'none';
+    updateActiveLayerStats(state.rasterLayers[layerKey]);
   }
 
   function addAscLayer(asc, fileName, layerKey, layerLabel, viewToggleEl) {
@@ -280,62 +296,30 @@
     setStatus(`Loaded ${fileName}`);
   }
 
-  async function addTiffLayer(file, layerKey, layerLabel, viewToggleEl) {
-    const buffer = await file.arrayBuffer();
-    const tiff = await GeoTIFF.fromArrayBuffer(buffer);
-    const image = await tiff.getImage();
-    const width = image.getWidth();
-    const height = image.getHeight();
-    const rasters = await image.readRasters();
-    const grid = rasters[0];
-    let min = Infinity, max = -Infinity;
-    for (let i = 0; i < grid.length; i++) {
-      const val = grid[i];
-      if (!Number.isFinite(val)) continue;
-      if (val < min) min = val;
-      if (val > max) max = val;
-    }
-    const canvas = renderGridToCanvas(width, height, grid, min, max);
-    const url = canvas.toDataURL('image/png');
-    let bounds = [[29.60, 119.85], [29.85, 120.10]];
-    let crsText = 'TIFF preview';
-    try {
-      const bbox = image.getBoundingBox();
-      if (bbox && bbox.length === 4) {
-        bounds = [[bbox[1], bbox[0]], [bbox[3], bbox[2]]];
-        crsText = 'TIFF bbox';
-      }
-    } catch (err) {}
-    const leafletLayer = L.imageOverlay(url, bounds, { opacity: 0.9 }).addTo(state.map);
-    state.map.fitBounds(bounds, { padding: [20, 20] });
-    registerRasterLayer(layerKey, layerLabel, file.name, leafletLayer, bounds, { min, max, width, height, crsText }, viewToggleEl);
-    setStatus(`Loaded ${file.name}`);
-  }
-
   async function handleRasterFile(file, layerKey, layerLabel, viewToggleEl) {
-    if (!file) return;
     const ext = file.name.split('.').pop().toLowerCase();
     if (ext === 'asc') {
       const text = await file.text();
       const asc = parseAsc(text);
       addAscLayer(asc, file.name, layerKey, layerLabel, viewToggleEl);
     } else if (ext === 'tif' || ext === 'tiff') {
-      await addTiffLayer(file, layerKey, layerLabel, viewToggleEl);
+      throw new Error('TIFF preview is not enabled in this FORM build. Please use ASC for required FORM inputs.');
     } else {
       throw new Error(`Unsupported file type: ${ext}`);
     }
   }
 
   function generateFormInputs() {
-    const count = parseInt(formSoilTypeCount.value, 10);
+    const count = Math.max(1, parseInt(formSoilTypeCount.value || '3', 10));
     const defaults = [
-      { soil_id: 1, name: 'Qg', phi_deg: 40.5, phi_cov: 0.02, c_kpa: 1.72, c_cov: 0.69, gamma_s: 16.87, rho_c_phi: -0.5 },
-      { soil_id: 2, name: 'Hs', phi_deg: 41.4, phi_cov: 0.08, c_kpa: 2.48, c_cov: 0.51, gamma_s: 16.48, rho_c_phi: -0.5 },
-      { soil_id: 3, name: 'Hi', phi_deg: 37.61, phi_cov: 0.08, c_kpa: 4.82, c_cov: 0.29, gamma_s: 15.5, rho_c_phi: -0.5 },
+      { soil_id: 1, name: 'Qg', phi_deg: 40.50, phi_cov: 0.02, c_kpa: 1.72, c_cov: 0.69, gamma_s: 16.87, rho_c_phi: -0.5 },
+      { soil_id: 2, name: 'Hs', phi_deg: 41.40, phi_cov: 0.08, c_kpa: 2.48, c_cov: 0.51, gamma_s: 16.48, rho_c_phi: -0.5 },
+      { soil_id: 3, name: 'Hi', phi_deg: 37.61, phi_cov: 0.08, c_kpa: 4.82, c_cov: 0.29, gamma_s: 15.50, rho_c_phi: -0.5 },
     ];
+
     formSoilTypeContainer.innerHTML = '';
     for (let i = 1; i <= count; i++) {
-      const base = defaults[i - 1] || { soil_id: i, name: `Soil ${i}`, phi_deg: 40, phi_cov: 0.05, c_kpa: 2, c_cov: 0.5, gamma_s: 16, rho_c_phi: -0.5 };
+      const base = defaults[i - 1] || { soil_id: i, name: `Soil ${i}`, phi_deg: 35, phi_cov: 0.05, c_kpa: 5, c_cov: 0.3, gamma_s: 18, rho_c_phi: -0.5 };
       const card = document.createElement('div');
       card.className = 'soil-param-card';
       card.innerHTML = `
@@ -381,7 +365,7 @@
     lines.push(`Soil thickness: ${state.uploadedFiles.soilThickness ? state.uploadedFiles.soilThickness.name : 'Missing'}`);
     lines.push(`DEM: ${state.uploadedFiles.dem ? state.uploadedFiles.dem.name : 'Not uploaded'}`);
     lines.push('');
-    lines.push(`<b>GeoTOP folder</b>`);
+    lines.push(`<b>GeoTOP PWP folder (inside FORM panel)</b>`);
     lines.push(`PWP files detected: ${state.pwpFiles.length}`);
     lines.push(`PWP file style: ${psiFileStyleSelect.value}`);
     lines.push(`PWP unit: ${psiUnitSelect.value}`);
@@ -412,7 +396,7 @@
     if (!state.uploadedFiles.slope) return 'Upload slope.asc first';
     if (!state.uploadedFiles.soilType) return 'Upload soiltype.asc first';
     if (!state.uploadedFiles.soilThickness) return 'Upload soilthickness.asc first';
-    if (!state.pwpFiles.length) return 'Select the GeoTOP PWP folder first';
+    if (!state.pwpFiles.length) return 'Select the GeoTOP PWP folder inside the FORM panel first';
     return null;
   }
 
@@ -498,7 +482,7 @@
   function syncConsole(logs) {
     consoleContent.innerHTML = '';
     logs.forEach(entry => {
-      const type = entry.includes('ERROR') ? 'err' : entry.includes('warning') ? 'warn' : 'info';
+      const type = entry.includes('ERROR') ? 'err' : entry.toLowerCase().includes('warning') ? 'warn' : 'info';
       const line = document.createElement('div');
       line.className = 'log-line ' + type;
       line.textContent = entry;
@@ -527,10 +511,10 @@
       if (!response.ok) continue;
       const text = await response.text();
       const asc = parseAsc(text);
-      state.resultFiles[name] = { text, asc, downloadUrl: `${backendUrl()}${job.outputs[name]}` };
+      state.resultFiles[name] = { text, asc, downloadUrl: `${backendUrl()}${job.outputs[name]}`, visible: false };
     }
     renderResultLayerControls();
-    if (state.resultFiles['PoF.asc']) showResultLayer('PoF.asc');
+    if (state.resultFiles['PoF.asc']) toggleResultLayer('PoF.asc', true);
   }
 
   function renderResultLayerControls() {
@@ -544,21 +528,55 @@
       const row = document.createElement('div');
       row.className = 'result-layer-row';
       row.innerHTML = `
-        <div class="result-layer-name">${name}</div>
+        <div>
+          <div class="result-layer-name">${name}</div>
+          <div class="result-layer-subtitle">Generated FORM output</div>
+        </div>
         <div class="result-layer-actions">
-          <label><input type="radio" name="activeResultLayer" ${name === 'PoF.asc' ? 'checked' : ''}/> View</label>
-          <a href="${info.downloadUrl}" target="_blank" rel="noopener">Download</a>
+          <label class="checkbox-inline"><input type="checkbox" ${name === 'PoF.asc' ? 'checked' : ''}/> View</label>
+          <a href="${info.downloadUrl}" target="_blank" rel="noopener" download>Download</a>
         </div>
       `;
-      row.querySelector('input[type="radio"]').addEventListener('change', () => showResultLayer(name));
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      checkbox.addEventListener('change', () => toggleResultLayer(name, checkbox.checked));
       resultLayerControls.appendChild(row);
     });
   }
 
-  function showResultLayer(name) {
+  function toggleResultLayer(name, shouldShow) {
     const result = state.resultFiles[name];
     if (!result) return;
-    addAscLayer(result.asc, name, `result_${name}`, name.replace('.asc', ''), null);
+    const layerKey = `result_${name}`;
+    const existing = state.rasterLayers[layerKey];
+
+    if (shouldShow) {
+      if (existing) {
+        if (!state.map.hasLayer(existing.layer)) existing.layer.addTo(state.map);
+        existing.visible = true;
+        state.activeLayerKey = layerKey;
+        updateActiveLayerStats(existing);
+      } else {
+        addAscLayer(result.asc, name, layerKey, name.replace('.asc', ''), null);
+      }
+      result.visible = true;
+      mapEmptyNote.style.display = 'none';
+    } else {
+      if (existing && state.map.hasLayer(existing.layer)) {
+        state.map.removeLayer(existing.layer);
+        existing.visible = false;
+      }
+      result.visible = false;
+
+      const visibleKeys = Object.keys(state.rasterLayers).filter(key => state.rasterLayers[key].visible && state.map.hasLayer(state.rasterLayers[key].layer));
+      if (visibleKeys.length) {
+        state.activeLayerKey = visibleKeys[visibleKeys.length - 1];
+        updateActiveLayerStats(state.rasterLayers[state.activeLayerKey]);
+      } else {
+        state.activeLayerKey = null;
+        mapEmptyNote.style.display = 'block';
+        updateActiveLayerStats(null);
+      }
+    }
   }
 
   document.querySelectorAll('.viz-tab').forEach(tab => {
@@ -589,9 +607,12 @@
       if (!layerObj) return;
       if (cfg.viewToggle.checked) {
         layerObj.layer.addTo(state.map);
+        layerObj.visible = true;
         state.activeLayerKey = layerKey;
+        updateActiveLayerStats(layerObj);
       } else if (state.map.hasLayer(layerObj.layer)) {
         state.map.removeLayer(layerObj.layer);
+        layerObj.visible = false;
       }
     });
   });
@@ -600,7 +621,12 @@
     state.pwpFiles = Array.from(e.target.files || []).filter(file => file.name.toLowerCase().endsWith('.asc'));
     summarizePwpFiles(state.pwpFiles);
     buildInputSummary();
-    setStatus(`Loaded ${state.pwpFiles.length} PWP files from folder selection`);
+    setStatus(`Loaded ${state.pwpFiles.length} PWP files from FORM panel folder selection`);
+    addConsoleLine('info', `GeoTOP PWP folder selected with ${state.pwpFiles.length} ASC files`);
+  });
+
+  [psiFileStyleSelect, psiUnitSelect, soilThicknessUnitSelect, useMultipleTimestepsInput, singleTimeCodeInput].forEach(el => {
+    el.addEventListener('change', buildInputSummary);
   });
 
   generateFormInputsBtn.addEventListener('click', generateFormInputs);

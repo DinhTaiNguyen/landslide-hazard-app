@@ -1,37 +1,43 @@
-# Landslide Hazard App — FORM-enabled restructure
+# Landslide Hazard App - Online FORM Workflow
 
-This repo restructures your current single-page prototype into a frontend + backend workflow so the **Run** button can send uploaded files to Python, execute the FORM computation, stream runtime logs back to the UI by polling, and expose the generated ASC result files for map preview and download.
+This repo is split into two parts:
 
-## New repo structure
+- `frontend/` -> static website UI
+- `backend/` -> FastAPI service that receives uploaded files, runs the Python FORM workflow, stores outputs, and serves downloadable result maps
+
+## What changed in this version
+
+- GeoTOP PWP folder upload was moved into the **FORM panel**.
+- Clicking **Run** uploads the current inputs to the backend and starts the Python FORM workflow.
+- Runtime logs appear in the **FORM running** tab.
+- Generated outputs are written as:
+  - `PoF.asc`
+  - `FS_min.asc`
+  - `FS_min_depth.asc`
+  - `beta.asc`
+- In the FORM panel, each result can be turned on/off and downloaded.
+- Default visible result is `PoF.asc`.
+
+## Folder structure
 
 ```text
 landslide-hazard-app-restructured/
-├─ frontend/
-│  ├─ index.html
-│  ├─ style.css
-│  ├─ script.js
-│  └─ images/
-│     └─ GeoXPM_logo_3D.png
-├─ backend/
-│  ├─ app.py
-│  ├─ form_runner.py
-│  ├─ requirements.txt
-│  └─ runs/                # created at runtime
-└─ README.md
+  frontend/
+    index.html
+    style.css
+    script.js
+    images/
+      GeoXPM_logo_3D.png
+  backend/
+    app.py
+    form_runner.py
+    requirements.txt
+    runs/                # created automatically at runtime
 ```
 
-## What changed
+## Local run
 
-- Added **GeoTOP PWP folder upload** on the left panel.
-- Added **FORM running** console tab in the center section.
-- Added **result layer controls** on the right panel with view + download.
-- Switched the FORM execution path from a placeholder button to a real backend API call.
-- Converted the original Python script from hardcoded local paths into a reusable backend runner.
-- Added job storage under `backend/runs/<job_id>/inputs` and `backend/runs/<job_id>/outputs`.
-
-## Run locally
-
-### 1) Start backend
+### Backend
 
 ```bash
 cd backend
@@ -45,9 +51,7 @@ pip install -r requirements.txt
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 2) Start frontend
-
-Use any static file server.
+### Frontend
 
 ```bash
 cd frontend
@@ -55,61 +59,62 @@ python -m http.server 5500
 ```
 
 Open:
+- frontend: `http://127.0.0.1:5500`
+- backend: `http://127.0.0.1:8000`
+
+## How uploaded data is stored
+
+Each run gets its own folder:
 
 ```text
-http://127.0.0.1:5500
+backend/runs/run_<job_id>/
+  inputs/
+    slope.asc
+    soiltype.asc
+    soilthickness.asc
+    dem.asc               # optional
+    pwp/
+      psizL0000N0001.asc
+      ...
+  outputs/
+    PoF.asc
+    FS_min.asc
+    FS_min_depth.asc
+    beta.asc
 ```
 
-Keep backend URL in the UI as:
+This makes it easy to:
+- keep each website run separate
+- debug failed runs
+- allow users to download generated files after completion
 
-```text
-http://127.0.0.1:8000
-```
+## Online deployment recommendation
 
-## Upload workflow
+### Frontend online
+Use **GitHub Pages** for `frontend/`.
 
-1. Upload `slope.asc`, `soiltype.asc`, and `soilthickness.asc`.
-2. Optionally upload DEM for preview.
-3. Select the GeoTOP output folder containing the PWP ASC files.
-4. Fill the FORM parameters on the right panel.
-5. Click **Run**.
-6. Watch runtime logs in **FORM running**.
-7. When complete, the result layers appear on the right. Default preview is `PoF.asc`.
+1. Push this repo to GitHub.
+2. Put the website files from `frontend/` on the branch you want to publish.
+3. In GitHub repo settings, enable **Pages** and publish from the folder or branch you choose.
+4. In the website UI, set **Backend URL** to your deployed backend URL.
 
-## Runtime storage
+### Backend online
+Use **Render**, **Railway**, or a VPS.
 
-Each run is saved like this:
+Example for Render:
+1. Create a new web service.
+2. Point it to the `backend/` folder.
+3. Build command:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Start command:
+   ```bash
+   uvicorn app:app --host 0.0.0.0 --port $PORT
+   ```
 
-```text
-backend/runs/run_<jobid>/
-├─ inputs/
-│  ├─ slope.asc
-│  ├─ soiltype.asc
-│  ├─ soilthickness.asc
-│  ├─ dem.asc
-│  └─ pwp/
-│     ├─ psizL0000N0001.asc
-│     ├─ ...
-├─ outputs/
-│  ├─ PoF.asc
-│  ├─ FS_min.asc
-│  ├─ FS_min_depth.asc
-│  └─ beta.asc
-```
+Because the backend stores uploaded files and generated outputs on disk, the hosting platform must support writable local storage during runtime. For long-term persistence, later you can move storage to S3, Cloudflare R2, or another object store.
 
-## Important deployment note
+## Important note
 
-This architecture is meant for **a real backend host**.
-If you deploy only the frontend on a static host, the Python FORM job cannot run there.
-
-Good options:
-- frontend: GitHub Pages / Netlify / Vercel
-- backend: Render / Railway / VPS / cloud VM / Docker container
-
-## Next improvements
-
-- Add progress percentage based on time-code completion.
-- Add zip download for all outputs.
-- Add result metadata JSON and run history.
-- Add GeoTOP execution endpoint later if you want the site to run GeoTOP itself before FORM.
-- Add cleanup policy for old runs.
+GitHub Pages is static hosting only. It cannot execute your Python FORM code by itself. That is why the FORM run must go to the backend.
