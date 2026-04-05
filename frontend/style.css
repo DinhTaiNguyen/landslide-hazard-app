@@ -244,3 +244,43 @@ code { background: rgba(255,255,255,.06); padding: 1px 4px; border-radius: 4px; 
 
 .result-layer-subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .checkbox-inline { display: inline-flex; align-items: center; gap: 6px; }
+
+.geotop-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.geotop-run-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255,255,255,.02);
+}
+
+.geotop-run-card.active-run-card {
+  border-color: rgba(74,160,255,.42);
+  box-shadow: inset 0 0 0 1px rgba(74,160,255,.18);
+}
+
+.geotop-run-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.geotop-run-actions {
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+
+.geotop-folder-summary,
+.geotop-run-status {
+  margin-top: 10px;
+}
+
+.geotop-file-list {
+  max-height: 120px;
+}

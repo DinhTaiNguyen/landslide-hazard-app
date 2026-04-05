@@ -47,7 +47,7 @@ On Render:
    `https://landslide-hazard-form-backend.onrender.com`
 
 You can test it by opening:
-`https://landslide-hazard-app/api/health`
+`https://your-backend-url/api/health`
 
 ### 2. Set frontend config
 

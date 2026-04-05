@@ -13,9 +13,6 @@
   const crsSelect = document.getElementById('crsSelect');
   const uploadStatus = document.getElementById('uploadStatus');
   const rasterStats = document.getElementById('rasterStats');
-  const pwpFolderInput = document.getElementById('pwpFolderInput');
-  const pwpFolderSummary = document.getElementById('pwpFolderSummary');
-  const pwpFileList = document.getElementById('pwpFileList');
   const formSoilTypeCount = document.getElementById('formSoilTypeCount');
   const generateFormInputsBtn = document.getElementById('generateFormInputsBtn');
   const formSoilTypeContainer = document.getElementById('formSoilTypeContainer');
@@ -24,12 +21,12 @@
   const soilThicknessUnitSelect = document.getElementById('soilThicknessUnitSelect');
   const useMultipleTimestepsInput = document.getElementById('useMultipleTimestepsInput');
   const singleTimeCodeInput = document.getElementById('singleTimeCodeInput');
-  const runFormBtn = document.getElementById('runFormBtn');
-  const runStatusBox = document.getElementById('runStatusBox');
+  const geotopRunCountInput = document.getElementById('geotopRunCountInput');
+  const generateGeotopRunsBtn = document.getElementById('generateGeotopRunsBtn');
+  const geotopRunCards = document.getElementById('geotopRunCards');
   const consoleContent = document.getElementById('consoleContent');
   const inputSummaryContent = document.getElementById('inputSummaryContent');
   const resultSummaryContent = document.getElementById('resultSummaryContent');
-  const resultLayerControls = document.getElementById('resultLayerControls');
   const backendUrlInput = document.getElementById('backendUrlInput');
   const checkBackendBtn = document.getElementById('checkBackendBtn');
   const backendStatus = document.getElementById('backendStatus');
@@ -49,10 +46,8 @@
     rasterLayers: {},
     activeLayerKey: null,
     uploadedFiles: { dem: null, slope: null, soilType: null, soilThickness: null },
-    pwpFiles: [],
-    currentJobId: null,
-    pollHandle: null,
-    resultFiles: {},
+    geotopRuns: [],
+    activeConsoleRunId: null,
   };
 
   const baseLayerConfigs = {
@@ -93,6 +88,29 @@
     consoleContent.scrollTop = consoleContent.scrollHeight;
   }
 
+  function renderConsoleForRun(runId) {
+    const run = state.geotopRuns.find(item => item.id === runId);
+    state.activeConsoleRunId = runId;
+    consoleContent.innerHTML = '';
+    if (!run) {
+      addConsoleLine('warn', 'No selected GeoTOP run card');
+      return;
+    }
+    (run.logs || []).forEach(entry => {
+      const lower = String(entry).toLowerCase();
+      const type = lower.includes('error') ? 'err' : lower.includes('warn') ? 'warn' : 'info';
+      const line = document.createElement('div');
+      line.className = 'log-line ' + type;
+      line.textContent = entry;
+      consoleContent.appendChild(line);
+    });
+    if (!run.logs.length) addConsoleLine('info', `GeoTOP folder ${run.label} has no logs yet.`);
+    consoleContent.scrollTop = consoleContent.scrollHeight;
+    document.querySelectorAll('.geotop-run-card').forEach(card => {
+      card.classList.toggle('active-run-card', Number(card.dataset.runId) === runId);
+    });
+  }
+
   function setStatus(message) {
     uploadStatus.textContent = message;
   }
@@ -118,7 +136,6 @@
       addConsoleLine('warn', 'Backend URL is empty. For online deployment, use your Render/Railway/VPS HTTPS URL.');
       return;
     }
-
     backendStatus.textContent = 'Checking...';
     backendStatus.className = '';
     try {
@@ -177,7 +194,6 @@
     const lines = text.replace(/\r/g, '').trim().split('\n');
     const header = {};
     let dataStart = 0;
-
     for (let i = 0; i < Math.min(lines.length, 10); i++) {
       const parts = lines[i].trim().split(/\s+/);
       if (parts.length >= 2) {
@@ -188,7 +204,6 @@
         }
       }
     }
-
     const width = parseInt(header.ncols, 10);
     const height = parseInt(header.nrows, 10);
     if (!width || !height) throw new Error('Invalid ASC header');
@@ -354,7 +369,6 @@
       { soil_id: 2, name: 'Hs', phi_deg: 41.40, phi_cov: 0.08, c_kpa: 2.48, c_cov: 0.51, gamma_s: 16.48, rho_c_phi: -0.5 },
       { soil_id: 3, name: 'Hi', phi_deg: 37.61, phi_cov: 0.08, c_kpa: 4.82, c_cov: 0.29, gamma_s: 15.50, rho_c_phi: -0.5 },
     ];
-
     formSoilTypeContainer.innerHTML = '';
     for (let i = 1; i <= count; i++) {
       const base = defaults[i - 1] || { soil_id: i, name: `Soil ${i}`, phi_deg: 35, phi_cov: 0.05, c_kpa: 5, c_cov: 0.3, gamma_s: 18, rho_c_phi: -0.5 };
@@ -395,24 +409,6 @@
     return soilParams;
   }
 
-  function buildInputSummary() {
-    const lines = [];
-    lines.push(`<b>Required maps</b>`);
-    lines.push(`Slope: ${state.uploadedFiles.slope ? state.uploadedFiles.slope.name : 'Missing'}`);
-    lines.push(`Soil type: ${state.uploadedFiles.soilType ? state.uploadedFiles.soilType.name : 'Missing'}`);
-    lines.push(`Soil thickness: ${state.uploadedFiles.soilThickness ? state.uploadedFiles.soilThickness.name : 'Missing'}`);
-    lines.push(`DEM: ${state.uploadedFiles.dem ? state.uploadedFiles.dem.name : 'Not uploaded'}`);
-    lines.push('');
-    lines.push(`<b>GeoTOP PWP folder (inside FORM panel)</b>`);
-    lines.push(`PWP files detected: ${state.pwpFiles.length}`);
-    lines.push(`PWP file style: ${psiFileStyleSelect.value}`);
-    lines.push(`PWP unit: ${psiUnitSelect.value}`);
-    lines.push(`Soil thickness unit: ${soilThicknessUnitSelect.value}`);
-    lines.push(`Use all time steps: ${useMultipleTimestepsInput.checked ? 'Yes' : 'No'}`);
-    lines.push(`Single time code: ${singleTimeCodeInput.value}`);
-    inputSummaryContent.innerHTML = lines.join('<br>');
-  }
-
   function detectTimeCodes(files) {
     const pattern = psiFileStyleSelect.value === 'psiz' ? /^psizL0000N(\d+)\.asc$/i : /^SoilLiqWaterPressL0000N(\d+)\.asc$/i;
     const codes = new Set();
@@ -423,32 +419,143 @@
     return Array.from(codes).sort((a, b) => Number(a) - Number(b));
   }
 
-  function summarizePwpFiles(files) {
-    const codes = detectTimeCodes(files);
-    const preview = files.slice(0, 12).map(f => f.webkitRelativePath || f.name).join('\n');
-    pwpFolderSummary.innerHTML = `Files: ${files.length}<br>Detected time codes: ${codes.length ? codes.join(', ') : 'None detected yet'}`;
-    pwpFileList.textContent = preview || 'No files in selection';
+  function getRunById(runId) {
+    return state.geotopRuns.find(item => item.id === runId);
   }
 
-  function validateBeforeRun() {
+  function summarizeRunFiles(run) {
+    const codes = detectTimeCodes(run.pwpFiles);
+    const preview = run.pwpFiles.slice(0, 12).map(f => f.webkitRelativePath || f.name).join('\n');
+    run.folderSummaryEl.innerHTML = `Files: ${run.pwpFiles.length}<br>Detected time codes: ${codes.length ? codes.join(', ') : 'None detected yet'}`;
+    run.fileListEl.textContent = preview || 'No files in selection';
+  }
+
+  function generateGeotopRunCards() {
+    const count = Math.max(1, parseInt(geotopRunCountInput.value || '1', 10));
+    const previous = new Map(state.geotopRuns.map(run => [run.id, run]));
+    geotopRunCards.innerHTML = '';
+    state.geotopRuns = [];
+    for (let i = 1; i <= count; i++) {
+      const preserved = previous.get(i);
+      const card = document.createElement('div');
+      card.className = 'geotop-run-card';
+      card.dataset.runId = String(i);
+      card.innerHTML = `
+        <div class="geotop-run-head">
+          <div>
+            <div class="result-layer-name">GeoTOP folder ${i}</div>
+            <div class="result-layer-subtitle">Upload one PWP folder for one date / scenario</div>
+          </div>
+          <button type="button" class="small-btn geotop-log-btn">Show logs</button>
+        </div>
+        <input id="pwpFolderInput_${i}" type="file" webkitdirectory directory multiple hidden />
+        <label for="pwpFolderInput_${i}" class="dropbox required">Select GeoTOP PWP folder ${i}</label>
+        <div class="summary-box geotop-folder-summary">No folder selected</div>
+        <div class="list-box geotop-file-list"></div>
+        <div class="geotop-run-actions">
+          <button type="button" class="primary-btn geotop-run-btn">Run GeoTOP folder ${i}</button>
+        </div>
+        <div class="summary-box geotop-run-status">Ready</div>
+        <div class="result-layers geotop-result-layers">No FORM outputs yet.</div>
+      `;
+      geotopRunCards.appendChild(card);
+      const run = {
+        id: i,
+        label: String(i),
+        pwpFiles: preserved ? preserved.pwpFiles : [],
+        folderInputEl: card.querySelector(`#pwpFolderInput_${i}`),
+        folderSummaryEl: card.querySelector('.geotop-folder-summary'),
+        fileListEl: card.querySelector('.geotop-file-list'),
+        runBtnEl: card.querySelector('.geotop-run-btn'),
+        logBtnEl: card.querySelector('.geotop-log-btn'),
+        runStatusEl: card.querySelector('.geotop-run-status'),
+        resultLayerControlsEl: card.querySelector('.geotop-result-layers'),
+        logs: preserved ? preserved.logs : [],
+        jobId: preserved ? preserved.jobId : null,
+        pollHandle: preserved ? preserved.pollHandle : null,
+        resultFiles: preserved ? preserved.resultFiles : {},
+      };
+      run.folderInputEl.addEventListener('change', e => {
+        run.pwpFiles = Array.from(e.target.files || []).filter(file => file.name.toLowerCase().endsWith('.asc'));
+        summarizeRunFiles(run);
+        buildInputSummary();
+        setStatus(`Loaded ${run.pwpFiles.length} PWP files for GeoTOP folder ${run.id}`);
+        run.logs.push(`[${new Date().toLocaleTimeString()}] GeoTOP folder ${run.id} selected with ${run.pwpFiles.length} ASC files`);
+        if (state.activeConsoleRunId === run.id) renderConsoleForRun(run.id);
+      });
+      run.runBtnEl.addEventListener('click', () => startFormRun(run.id));
+      run.logBtnEl.addEventListener('click', () => renderConsoleForRun(run.id));
+      state.geotopRuns.push(run);
+      summarizeRunFiles(run);
+      if (Object.keys(run.resultFiles).length) renderResultLayerControls(run);
+    }
+    if (!state.activeConsoleRunId || !getRunById(state.activeConsoleRunId)) {
+      renderConsoleForRun(1);
+    } else {
+      renderConsoleForRun(state.activeConsoleRunId);
+    }
+    buildInputSummary();
+  }
+
+  function buildInputSummary() {
+    const lines = [];
+    lines.push('<b>Required maps</b>');
+    lines.push(`Slope: ${state.uploadedFiles.slope ? state.uploadedFiles.slope.name : 'Missing'}`);
+    lines.push(`Soil type: ${state.uploadedFiles.soilType ? state.uploadedFiles.soilType.name : 'Missing'}`);
+    lines.push(`Soil thickness: ${state.uploadedFiles.soilThickness ? state.uploadedFiles.soilThickness.name : 'Missing'}`);
+    lines.push(`DEM: ${state.uploadedFiles.dem ? state.uploadedFiles.dem.name : 'Not uploaded'}`);
+    lines.push('');
+    lines.push('<b>FORM general settings</b>');
+    lines.push(`PWP file style: ${psiFileStyleSelect.value}`);
+    lines.push(`PWP unit: ${psiUnitSelect.value}`);
+    lines.push(`Soil thickness unit: ${soilThicknessUnitSelect.value}`);
+    lines.push(`Use all time steps: ${useMultipleTimestepsInput.checked ? 'Yes' : 'No'}`);
+    lines.push(`Single time code: ${singleTimeCodeInput.value}`);
+    lines.push('');
+    lines.push('<b>GeoTOP folders</b>');
+    state.geotopRuns.forEach(run => {
+      const codes = detectTimeCodes(run.pwpFiles);
+      lines.push(`Folder ${run.id}: ${run.pwpFiles.length} files${codes.length ? ` | time codes: ${codes.join(', ')}` : ''}`);
+    });
+    inputSummaryContent.innerHTML = lines.join('<br>');
+  }
+
+  function validateBeforeRun(run) {
     if (!state.uploadedFiles.slope) return 'Upload slope.asc first';
     if (!state.uploadedFiles.soilType) return 'Upload soiltype.asc first';
     if (!state.uploadedFiles.soilThickness) return 'Upload soilthickness.asc first';
-    if (!state.pwpFiles.length) return 'Select the GeoTOP PWP folder inside the FORM panel first';
+    if (!run.pwpFiles.length) return `Select the GeoTOP PWP folder in box ${run.id} first`;
+    if (!backendUrl()) return 'Set the backend URL first';
     return null;
   }
 
-  async function startFormRun() {
-    const validationError = validateBeforeRun();
+  function clearRunResultLayers(run) {
+    Object.keys(run.resultFiles || {}).forEach(name => {
+      const layerKey = `run${run.id}_${name}`;
+      const existing = state.rasterLayers[layerKey];
+      if (existing && state.map.hasLayer(existing.layer)) state.map.removeLayer(existing.layer);
+      delete state.rasterLayers[layerKey];
+    });
+    run.resultFiles = {};
+    run.resultLayerControlsEl.textContent = 'No FORM outputs yet.';
+  }
+
+  async function startFormRun(runId) {
+    const run = getRunById(runId);
+    if (!run) return;
+    const validationError = validateBeforeRun(run);
     if (validationError) {
-      runStatusBox.textContent = validationError;
-      addConsoleLine('err', validationError);
+      run.runStatusEl.textContent = validationError;
+      run.logs.push(`[${new Date().toLocaleTimeString()}] ERROR: ${validationError}`);
+      renderConsoleForRun(run.id);
       return;
     }
 
-    runFormBtn.disabled = true;
-    runStatusBox.textContent = 'Uploading inputs and starting job...';
-    addConsoleLine('info', 'Submitting FORM job to backend');
+    clearRunResultLayers(run);
+    run.runBtnEl.disabled = true;
+    run.runStatusEl.textContent = 'Uploading inputs and starting job...';
+    run.logs = [`[${new Date().toLocaleTimeString()}] Submitting FORM job for GeoTOP folder ${run.id}`];
+    renderConsoleForRun(run.id);
 
     const settings = {
       psi_file_style: psiFileStyleSelect.value,
@@ -465,7 +572,7 @@
     formData.append('soiltype_file', state.uploadedFiles.soilType);
     formData.append('soilthickness_file', state.uploadedFiles.soilThickness);
     if (state.uploadedFiles.dem) formData.append('dem_file', state.uploadedFiles.dem);
-    state.pwpFiles.forEach(file => formData.append('pwp_files', file, file.name));
+    run.pwpFiles.forEach(file => formData.append('pwp_files', file, file.name));
 
     try {
       const response = await fetch(`${backendUrl()}/api/form/run`, { method: 'POST', body: formData });
@@ -474,101 +581,97 @@
         throw new Error(txt || 'Failed to start run');
       }
       const data = await response.json();
-      state.currentJobId = data.job_id;
-      runStatusBox.textContent = `Job started: ${data.job_id}`;
-      startPolling();
+      run.jobId = data.job_id;
+      run.runStatusEl.textContent = `Job started: ${data.job_id}`;
+      startPolling(run.id);
+      buildInputSummary();
     } catch (err) {
-      runStatusBox.textContent = 'Failed to start';
-      addConsoleLine('err', `FORM start failed: ${err.message}`);
-      runFormBtn.disabled = false;
+      run.runStatusEl.textContent = 'Failed to start';
+      run.logs.push(`[${new Date().toLocaleTimeString()}] ERROR: FORM start failed: ${err.message}`);
+      renderConsoleForRun(run.id);
+      run.runBtnEl.disabled = false;
     }
   }
 
-  function startPolling() {
-    if (state.pollHandle) clearInterval(state.pollHandle);
-    pollJob();
-    state.pollHandle = setInterval(pollJob, 1200);
+  function startPolling(runId) {
+    const run = getRunById(runId);
+    if (!run) return;
+    if (run.pollHandle) clearInterval(run.pollHandle);
+    pollJob(runId);
+    run.pollHandle = setInterval(() => pollJob(runId), 1200);
   }
 
-  async function pollJob() {
-    if (!state.currentJobId) return;
+  async function pollJob(runId) {
+    const run = getRunById(runId);
+    if (!run || !run.jobId) return;
     try {
-      const response = await fetch(`${backendUrl()}/api/jobs/${state.currentJobId}`);
+      const response = await fetch(`${backendUrl()}/api/jobs/${run.jobId}`);
       if (!response.ok) throw new Error('Polling failed');
       const job = await response.json();
-      syncConsole(job.logs || []);
-      renderResultSummary(job);
+      run.logs = job.logs || [];
+      renderResultSummary();
+      if (state.activeConsoleRunId === run.id) renderConsoleForRun(run.id);
       if (job.status === 'completed') {
-        runStatusBox.textContent = 'Completed';
-        runFormBtn.disabled = false;
-        clearInterval(state.pollHandle);
-        state.pollHandle = null;
-        await loadOutputLayers(job);
+        run.runStatusEl.textContent = 'Completed';
+        run.runBtnEl.disabled = false;
+        clearInterval(run.pollHandle);
+        run.pollHandle = null;
+        await loadOutputLayers(run, job);
       } else if (job.status === 'failed') {
-        runStatusBox.textContent = `Failed: ${job.error || 'Unknown error'}`;
-        runFormBtn.disabled = false;
-        clearInterval(state.pollHandle);
-        state.pollHandle = null;
+        run.runStatusEl.textContent = `Failed: ${job.error || 'Unknown error'}`;
+        run.runBtnEl.disabled = false;
+        clearInterval(run.pollHandle);
+        run.pollHandle = null;
       } else {
-        runStatusBox.textContent = `Status: ${job.status}`;
+        run.runStatusEl.textContent = `Status: ${job.status}`;
       }
     } catch (err) {
-      addConsoleLine('err', `Polling error: ${err.message}`);
+      run.logs.push(`[${new Date().toLocaleTimeString()}] ERROR: Polling error: ${err.message}`);
+      if (state.activeConsoleRunId === run.id) renderConsoleForRun(run.id);
     }
   }
 
-  function syncConsole(logs) {
-    consoleContent.innerHTML = '';
-    logs.forEach(entry => {
-      const type = entry.includes('ERROR') ? 'err' : entry.toLowerCase().includes('warning') ? 'warn' : 'info';
-      const line = document.createElement('div');
-      line.className = 'log-line ' + type;
-      line.textContent = entry;
-      consoleContent.appendChild(line);
-    });
-    consoleContent.scrollTop = consoleContent.scrollHeight;
-  }
-
-  function renderResultSummary(job) {
+  function renderResultSummary() {
     const lines = [];
-    lines.push(`<b>Status</b>: ${job.status}`);
-    if (job.error) lines.push(`<b>Error</b>: ${job.error}`);
-    if (job.summary) {
-      Object.keys(job.summary).forEach(key => lines.push(`<b>${key}</b>: ${job.summary[key]}`));
-    }
+    state.geotopRuns.forEach(run => {
+      lines.push(`<b>GeoTOP folder ${run.id}</b>: ${run.runStatusEl.textContent}`);
+      const outputNames = Object.keys(run.resultFiles || {});
+      if (outputNames.length) lines.push(`Outputs: ${outputNames.join(', ')}`);
+    });
     resultSummaryContent.innerHTML = lines.join('<br>') || 'No result summary yet.';
   }
 
-  async function loadOutputLayers(job) {
-    state.resultFiles = {};
+  async function loadOutputLayers(run, job) {
+    run.resultFiles = {};
     const names = ['PoF.asc', 'FS_min.asc', 'FS_min_depth.asc', 'beta.asc'];
     for (const name of names) {
       if (!job.outputs || !job.outputs[name]) continue;
-      const textUrl = `${backendUrl()}/api/jobs/${state.currentJobId}/outputs/${encodeURIComponent(name)}/text`;
+      const textUrl = `${backendUrl()}/api/jobs/${run.jobId}/outputs/${encodeURIComponent(name)}/text`;
       const response = await fetch(textUrl);
       if (!response.ok) continue;
       const text = await response.text();
       const asc = parseAsc(text);
-      state.resultFiles[name] = { text, asc, downloadUrl: `${backendUrl()}${job.outputs[name]}`, visible: false };
+      run.resultFiles[name] = { text, asc, downloadUrl: `${backendUrl()}${job.outputs[name]}`, visible: false };
     }
-    renderResultLayerControls();
-    if (state.resultFiles['PoF.asc']) toggleResultLayer('PoF.asc', true);
+    renderResultLayerControls(run);
+    if (run.resultFiles['PoF.asc']) toggleResultLayer(run.id, 'PoF.asc', true);
+    renderResultSummary();
   }
 
-  function renderResultLayerControls() {
-    const entries = Object.entries(state.resultFiles);
+  function renderResultLayerControls(run) {
+    const entries = Object.entries(run.resultFiles || {});
     if (!entries.length) {
-      resultLayerControls.textContent = 'No FORM outputs yet.';
+      run.resultLayerControlsEl.textContent = 'No FORM outputs yet.';
       return;
     }
-    resultLayerControls.innerHTML = '';
+    run.resultLayerControlsEl.innerHTML = '';
     entries.forEach(([name, info]) => {
       const row = document.createElement('div');
       row.className = 'result-layer-row';
       row.innerHTML = `
         <div>
           <div class="result-layer-name">${name}</div>
-          <div class="result-layer-subtitle">Generated FORM output</div>
+          <div class="result-layer-subtitle">Generated for GeoTOP folder ${run.id}</div>
         </div>
         <div class="result-layer-actions">
           <label class="checkbox-inline"><input type="checkbox" ${name === 'PoF.asc' ? 'checked' : ''}/> View</label>
@@ -576,17 +679,17 @@
         </div>
       `;
       const checkbox = row.querySelector('input[type="checkbox"]');
-      checkbox.addEventListener('change', () => toggleResultLayer(name, checkbox.checked));
-      resultLayerControls.appendChild(row);
+      checkbox.addEventListener('change', () => toggleResultLayer(run.id, name, checkbox.checked));
+      run.resultLayerControlsEl.appendChild(row);
     });
   }
 
-  function toggleResultLayer(name, shouldShow) {
-    const result = state.resultFiles[name];
-    if (!result) return;
-    const layerKey = `result_${name}`;
+  function toggleResultLayer(runId, name, shouldShow) {
+    const run = getRunById(runId);
+    if (!run || !run.resultFiles[name]) return;
+    const result = run.resultFiles[name];
+    const layerKey = `run${runId}_${name}`;
     const existing = state.rasterLayers[layerKey];
-
     if (shouldShow) {
       if (existing) {
         if (!state.map.hasLayer(existing.layer)) existing.layer.addTo(state.map);
@@ -594,7 +697,7 @@
         state.activeLayerKey = layerKey;
         updateActiveLayerStats(existing);
       } else {
-        addAscLayer(result.asc, name, layerKey, name.replace('.asc', ''), null);
+        addAscLayer(result.asc, `run${runId}_${name}`, layerKey, `Run ${runId} - ${name.replace('.asc', '')}`, null);
       }
       result.visible = true;
       mapEmptyNote.style.display = 'none';
@@ -604,7 +707,6 @@
         existing.visible = false;
       }
       result.visible = false;
-
       const visibleKeys = Object.keys(state.rasterLayers).filter(key => state.rasterLayers[key].visible && state.map.hasLayer(state.rasterLayers[key].layer));
       if (visibleKeys.length) {
         state.activeLayerKey = visibleKeys[visibleKeys.length - 1];
@@ -655,20 +757,15 @@
     });
   });
 
-  pwpFolderInput.addEventListener('change', e => {
-    state.pwpFiles = Array.from(e.target.files || []).filter(file => file.name.toLowerCase().endsWith('.asc'));
-    summarizePwpFiles(state.pwpFiles);
-    buildInputSummary();
-    setStatus(`Loaded ${state.pwpFiles.length} PWP files from FORM panel folder selection`);
-    addConsoleLine('info', `GeoTOP PWP folder selected with ${state.pwpFiles.length} ASC files`);
-  });
-
   [psiFileStyleSelect, psiUnitSelect, soilThicknessUnitSelect, useMultipleTimestepsInput, singleTimeCodeInput].forEach(el => {
-    el.addEventListener('change', buildInputSummary);
+    el.addEventListener('change', () => {
+      state.geotopRuns.forEach(run => summarizeRunFiles(run));
+      buildInputSummary();
+    });
   });
 
   generateFormInputsBtn.addEventListener('click', generateFormInputs);
-  runFormBtn.addEventListener('click', startFormRun);
+  generateGeotopRunsBtn.addEventListener('click', generateGeotopRunCards);
   checkBackendBtn.addEventListener('click', checkBackend);
   backendUrlInput.addEventListener('change', () => {
     const value = backendUrl();
@@ -682,7 +779,6 @@
   initializeBackendInput();
   initMap();
   generateFormInputs();
+  generateGeotopRunCards();
   buildInputSummary();
-  checkBackend();
-  addConsoleLine('info', 'Frontend ready');
 })();

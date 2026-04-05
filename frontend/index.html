@@ -149,15 +149,6 @@
       <div class="panel-title">FORM Panel</div>
 
       <div class="section-block">
-        <div class="section-title">GeoTOP PWP folder upload</div>
-        <div class="field-help">Select the GeoTOP output folder that contains files such as <code>psizL0000N0001.asc</code> or <code>SoilLiqWaterPressL0000N0001.asc</code>. The folder upload is inside the FORM panel because these files are used directly by the FORM run.</div>
-        <input id="pwpFolderInput" type="file" webkitdirectory directory multiple hidden />
-        <label for="pwpFolderInput" class="dropbox required">Select GeoTOP PWP folder</label>
-        <div id="pwpFolderSummary" class="summary-box">No folder selected</div>
-        <div id="pwpFileList" class="list-box"></div>
-      </div>
-
-      <div class="section-block">
         <div class="section-title">General settings</div>
         <div class="field-grid two-col">
           <div class="field-group">
@@ -202,15 +193,15 @@
       </div>
 
       <div class="section-block">
-        <div class="section-title">Run FORM</div>
-        <button id="runFormBtn" class="primary-btn" type="button">Run</button>
-        <div id="runStatusBox" class="summary-box">Ready</div>
-      </div>
-
-      <div class="section-block">
-        <div class="section-title">Result layers</div>
-        <div class="field-help">Default display is <code>PoF.asc</code>. You can turn each result on or off, and download the generated ASCII grids.</div>
-        <div id="resultLayerControls" class="result-layers">No FORM outputs yet.</div>
+        <div class="section-title bar-title">
+          <span>GeoTOP folders to update</span>
+          <div class="inline-tools">
+            <input id="geotopRunCountInput" type="number" min="1" value="1" class="mini-number" />
+            <button id="generateGeotopRunsBtn" type="button" class="small-btn">Generate</button>
+          </div>
+        </div>
+        <div class="field-help">Each GeoTOP folder usually represents one date. Create as many GeoTOP boxes as you need. Each box has its own folder upload, run button, status, and result layer controls.</div>
+        <div id="geotopRunCards" class="geotop-run-list"></div>
       </div>
     </aside>
   </div>
