@@ -44,7 +44,7 @@ On Render:
 2. Render should detect `render.yaml`.
 3. Deploy.
 4. After deploy, copy the backend URL, for example:
-   `https://landslide-hazard-form-backend.onrender.com`
+   `https://landslide-hazard-app.onrender.com`
 
 You can test it by opening:
 `https://your-backend-url/api/health`
@@ -55,7 +55,7 @@ Edit `config.js` in the repo root to:
 
 ```js
 window.APP_CONFIG = window.APP_CONFIG || {
-  API_BASE_URL: 'https://your-backend-url.onrender.com'
+  API_BASE_URL: 'https://landslide-hazard-app.onrender.com'
 };
 ```
 
