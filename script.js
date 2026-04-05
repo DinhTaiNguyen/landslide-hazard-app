@@ -460,27 +460,34 @@
 
   function updateStageEventSelectors() {
     const events = state.ml.detectedEvents.slice();
-    const checkedTest = Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value);
-    const remainingForVal = events.filter(e => !checkedTest.includes(e));
-    stage1ValEventsBox.innerHTML = '';
-    remainingForVal.forEach(eventId => {
+    const previousTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    const previousVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+
+    stage1TestEventsBox.innerHTML = '';
+    events.forEach((eventId, idx) => {
+      const checked = previousTest.size ? previousTest.has(eventId) : idx < Math.min(4, events.length);
       const label = document.createElement('label');
-      label.innerHTML = `<input type="checkbox" value="${eventId}" /> ${eventId}`;
+      label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
+      label.querySelector('input').addEventListener('change', updateStageEventSelectors);
+      stage1TestEventsBox.appendChild(label);
+    });
+
+    const checkedTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    stage1ValEventsBox.innerHTML = '';
+    events.filter(e => !checkedTest.has(e)).forEach(eventId => {
+      const checked = previousVal.has(eventId);
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
+      label.querySelector('input').addEventListener('change', updateStageEventSelectors);
       stage1ValEventsBox.appendChild(label);
     });
-    const checkedVal = Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value);
-    const remainingForStage2 = events.filter(e => !checkedTest.includes(e) && !checkedVal.includes(e));
+
+    const checkedVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    const remainingForStage2 = events.filter(e => !checkedTest.has(e) && !checkedVal.has(e));
     stage2EventSelect.innerHTML = remainingForStage2.map(e => `<option value="${e}">${e}</option>`).join('');
   }
 
   function renderStageEventBoxes() {
-    stage1TestEventsBox.innerHTML = '';
-    state.ml.detectedEvents.forEach((eventId, idx) => {
-      const label = document.createElement('label');
-      label.innerHTML = `<input type="checkbox" value="${eventId}" ${idx < Math.min(4, state.ml.detectedEvents.length) ? 'checked' : ''}/> ${eventId}`;
-      label.querySelector('input').addEventListener('change', updateStageEventSelectors);
-      stage1TestEventsBox.appendChild(label);
-    });
     updateStageEventSelectors();
   }
 
@@ -507,14 +514,30 @@
 
   function renderMlMapLayerControls() {
     mlMapLayersList.innerHTML = '';
+    if (!state.ml.mapFiles.length) {
+      mlMapLayersList.innerHTML = '<div class="summary-box">No ASC maps detected yet.</div>';
+      return;
+    }
     state.ml.mapFiles.forEach((file, idx) => {
+      const displayName = file.webkitRelativePath || file.name || `map_${idx + 1}.asc`;
       const row = document.createElement('div'); row.className = 'layer-row';
-      row.innerHTML = `<span>${file.name}</span><div class="layer-actions"><label><input type="checkbox"/> View</label></div>`;
+      row.innerHTML = `<span>${displayName}</span><div class="layer-actions"><label><input type="checkbox"/> View</label></div>`;
       const checkbox = row.querySelector('input');
-      const key = `ml_map_${idx}_${file.name}`;
+      const key = `ml_map_${idx}_${(file.name || `map_${idx}`).replace(/[^a-zA-Z0-9_\-.]/g, '_')}`;
       checkbox.addEventListener('change', async () => {
-        if (checkbox.checked) await displayAscFile(file, key, file.name);
-        else if (rasterLayers[key] && map.hasLayer(rasterLayers[key].layer)) { map.removeLayer(rasterLayers[key].layer); delete rasterLayers[key]; }
+        try {
+          if (checkbox.checked) {
+            await displayAscFile(file, key, displayName);
+            addConsoleLine(mlConsoleContent, 'info', `Displayed ML map: ${displayName}`);
+          } else if (rasterLayers[key] && map.hasLayer(rasterLayers[key].layer)) {
+            map.removeLayer(rasterLayers[key].layer);
+            delete rasterLayers[key];
+          }
+        } catch (err) {
+          checkbox.checked = false;
+          addConsoleLine(mlConsoleContent, 'err', `Failed to display ${displayName}: ${err.message}`);
+          setStatus(uploadStatus, `Failed to display ${displayName}`);
+        }
       });
       mlMapLayersList.appendChild(row);
     });
@@ -641,10 +664,10 @@
   function onRasterSelected(key, file) {
     state.formInputs[key] = file;
     const configKey = key === 'soilType' ? 'soilType' : key === 'soilThickness' ? 'soilThickness' : key;
-    rasterConfigs[configKey].selectedFile.textContent = file ? file.name : 'None';
+    rasterConfigs[configKey].selectedFile.textContent = (file && (file.name || file.webkitRelativePath)) ? (file.name || file.webkitRelativePath) : 'None';
     rasterConfigs[configKey].viewToggle.disabled = !file;
     rasterConfigs[configKey].viewToggle.checked = !!file;
-    if (file) displayAscFile(file, `base_${key}`, file.name).catch(err => addConsoleLine(consoleContent, 'err', err.message));
+    if (file) displayAscFile(file, `base_${key}`, file.name || key).catch(err => { addConsoleLine(consoleContent, 'err', `Failed to load ${file.name || key}: ${err.message}`); setStatus(uploadStatus, `Failed to load ${file.name || key}`); });
     updateInputSummary();
   }
 
@@ -656,15 +679,20 @@
       onRasterSelected(stateKey, file);
       cfg.viewToggle.onchange = async () => {
         const layerKey = `base_${stateKey}`;
-        if (cfg.viewToggle.checked) await displayAscFile(file, layerKey, file.name);
-        else if (rasterLayers[layerKey] && map.hasLayer(rasterLayers[layerKey].layer)) { map.removeLayer(rasterLayers[layerKey].layer); delete rasterLayers[layerKey]; }
+        try {
+          if (cfg.viewToggle.checked) await displayAscFile(file, layerKey, file.name || stateKey);
+          else if (rasterLayers[layerKey] && map.hasLayer(rasterLayers[layerKey].layer)) { map.removeLayer(rasterLayers[layerKey].layer); delete rasterLayers[layerKey]; }
+        } catch (err) {
+          cfg.viewToggle.checked = false;
+          addConsoleLine(consoleContent, 'err', `Failed to display ${file.name || stateKey}: ${err.message}`);
+        }
       };
     });
   });
 
   mlMapsFolderInput.addEventListener('change', () => {
     state.ml.mapFiles = Array.from(mlMapsFolderInput.files || []).filter(f => /\.asc$/i.test(f.name));
-    mlMapsSummary.textContent = `${state.ml.mapFiles.length} ASC map files detected.`;
+    mlMapsSummary.textContent = state.ml.mapFiles.length ? `${state.ml.mapFiles.length} ASC map files detected. First files: ${state.ml.mapFiles.slice(0,3).map(f => f.name || f.webkitRelativePath || 'unknown').join(', ')}${state.ml.mapFiles.length > 3 ? ' ...' : ''}` : 'No ASC map files detected.';
     renderMlMapLayerControls();
     updateInputSummary();
   });
@@ -672,7 +700,7 @@
   mlFormOutputsFolderInput.addEventListener('change', () => {
     state.ml.formOutputFiles = Array.from(mlFormOutputsFolderInput.files || []).filter(f => /\.(asc|txt|csv)$/i.test(f.name));
     state.ml.detectedEvents = parseDetectedEventsFromFormFiles(state.ml.formOutputFiles);
-    mlFormOutputsSummary.textContent = `${state.ml.formOutputFiles.length} files uploaded from FORM outputs folder.`;
+    mlFormOutputsSummary.textContent = state.ml.formOutputFiles.length ? `${state.ml.formOutputFiles.length} files uploaded from FORM outputs folder.` : 'No FORM output files detected.';
     mlDetectedEventsBox.textContent = state.ml.detectedEvents.length ? `Detected event_id from PoF.asc folders:\n${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected.';
     renderRainfallBoxes();
     renderStageEventBoxes();
