@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Landslide Hazard App</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar card">
+      <div class="brand-wrap">
+        <img src="images/GeoXPM_logo_3D.png" alt="GeoXPM Logo" class="brand-logo" />
+        <div>
+          <div class="brand-title">MCG Landslide Hazard Mapping Predictor Pro</div>
+          <div class="brand-subtitle">FORM-based probability of failure workflow with website upload, runtime log, and downloadable result maps</div>
+        </div>
+      </div>
+      <div class="backend-line">
+        <label for="backendUrlInput">Backend URL</label>
+        <input id="backendUrlInput" type="text" value="http://127.0.0.1:8000" />
+        <button id="checkBackendBtn" type="button" class="small-btn">Check</button>
+        <span id="backendStatus">Waiting</span>
+      </div>
+    </header>
+
+    <aside class="card side-panel left-panel">
+      <div class="panel-title">Data Input</div>
+      <div class="section-block">
+        <div class="section-title">Required raster maps</div>
+        <div class="field-group">
+          <label class="field-label" for="crsSelect">Coordinate reference system</label>
+          <select id="crsSelect" class="field-input">
+            <option value="auto">Auto detect</option>
+            <option value="EPSG:4326">EPSG:4326 - WGS84</option>
+            <option value="EPSG:4490">EPSG:4490 - CGCS2000 geographic</option>
+            <option value="EPSG:3857">EPSG:3857 - Web Mercator</option>
+            <option value="EPSG:4549" selected>EPSG:4549 - CGCS2000 / 3-degree Gauss-Kruger CM 120E</option>
+          </select>
+        </div>
+
+        <div class="upload-card">
+          <div class="upload-row-head">
+            <span>DEM (optional preview only)</span>
+            <label><input id="demViewToggle" type="checkbox" checked disabled /> View</label>
+          </div>
+          <input id="demFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+          <label for="demFileInput" class="dropbox">Upload DEM raster</label>
+          <div id="demSelectedFile" class="file-chip">None</div>
+        </div>
+
+        <div class="upload-card">
+          <div class="upload-row-head">
+            <span>Slope map</span>
+            <label><input id="slopeViewToggle" type="checkbox" checked disabled /> View</label>
+          </div>
+          <input id="slopeFileInput" type="file" accept=".asc" hidden />
+          <label for="slopeFileInput" class="dropbox required">Upload slope.asc</label>
+          <div id="slopeSelectedFile" class="file-chip">None</div>
+        </div>
+
+        <div class="upload-card">
+          <div class="upload-row-head">
+            <span>Soil type map</span>
+            <label><input id="soilTypeViewToggle" type="checkbox" checked disabled /> View</label>
+          </div>
+          <input id="soilTypeFileInput" type="file" accept=".asc" hidden />
+          <label for="soilTypeFileInput" class="dropbox required">Upload soiltype.asc</label>
+          <div id="soilTypeSelectedFile" class="file-chip">None</div>
+        </div>
+
+        <div class="upload-card">
+          <div class="upload-row-head">
+            <span>Soil thickness map</span>
+            <label><input id="soilThicknessViewToggle" type="checkbox" checked disabled /> View</label>
+          </div>
+          <input id="soilThicknessFileInput" type="file" accept=".asc" hidden />
+          <label for="soilThicknessFileInput" class="dropbox required">Upload soilthickness.asc</label>
+          <div id="soilThicknessSelectedFile" class="file-chip">None</div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-title">GeoTOP PWP folder upload</div>
+        <div class="field-help">Select the output folder that contains files such as <code>psizL0000N0001.asc</code> or <code>SoilLiqWaterPressL0000N0001.asc</code>. Chromium-based browsers support folder selection with <code>webkitdirectory</code>.</div>
+        <input id="pwpFolderInput" type="file" webkitdirectory directory multiple hidden />
+        <label for="pwpFolderInput" class="dropbox required">Select GeoTOP PWP folder</label>
+        <div id="pwpFolderSummary" class="summary-box">No folder selected</div>
+        <div id="pwpFileList" class="list-box"></div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-title">Status</div>
+        <div id="uploadStatus" class="summary-box">Waiting for uploads...</div>
+        <div id="rasterStats" class="summary-box">No active layer</div>
+      </div>
+    </aside>
+
+    <main class="card center-panel">
+      <div class="panel-title">Analyse Map</div>
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div class="map-overlay-controls">
+          <div class="toolbar-row">
+            <label for="basemapSelect">Basemap</label>
+            <select id="basemapSelect">
+              <option value="osm">OpenStreetMap</option>
+              <option value="terrain">Terrain</option>
+              <option value="voyager">Voyager</option>
+              <option value="satellite">Satellite</option>
+            </select>
+          </div>
+          <div class="toolbar-row buttons">
+            <button id="resetViewBtn" type="button" class="small-btn">Reset view</button>
+            <button id="fitLayerBtn" type="button" class="small-btn">Fit active layer</button>
+            <button id="clearLayerBtn" type="button" class="small-btn">Clear all layers</button>
+          </div>
+        </div>
+        <div id="mapEmptyNote" class="map-empty-note">Upload or generate a raster to display it here.</div>
+        <div id="colorbarPanel" class="colorbar-panel" style="display:none;">
+          <div class="colorbar-title">Raster legend</div>
+          <div class="colorbar-wrap">
+            <div class="colorbar-gradient"></div>
+            <div class="colorbar-labels">
+              <span id="colorbarMax">max</span>
+              <span id="colorbarMid">mid</span>
+              <span id="colorbarMin">min</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-panel">
+        <div class="tab-row">
+          <button class="viz-tab active" data-viz="formRunningPanel" type="button">FORM running</button>
+          <button class="viz-tab" data-viz="inputSummaryPanel" type="button">Input summary</button>
+          <button class="viz-tab" data-viz="resultSummaryPanel" type="button">Result summary</button>
+        </div>
+
+        <section id="formRunningPanel" class="viz-panel active">
+          <div id="consoleContent" class="console-panel"></div>
+        </section>
+
+        <section id="inputSummaryPanel" class="viz-panel">
+          <div id="inputSummaryContent" class="summary-scroll">No input summary yet.</div>
+        </section>
+
+        <section id="resultSummaryPanel" class="viz-panel">
+          <div id="resultSummaryContent" class="summary-scroll">No result summary yet.</div>
+        </section>
+      </div>
+    </main>
+
+    <aside class="card side-panel right-panel">
+      <div class="panel-title">FORM Panel</div>
+
+      <div class="section-block">
+        <div class="section-title">General settings</div>
+        <div class="field-grid two-col">
+          <div class="field-group">
+            <label class="field-label" for="psiFileStyleSelect">PWP file style</label>
+            <select id="psiFileStyleSelect" class="field-input">
+              <option value="psiz" selected>psiz</option>
+              <option value="soilliq">SoilLiqWaterPress</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="psiUnitSelect">PWP unit</label>
+            <select id="psiUnitSelect" class="field-input">
+              <option value="mm_head" selected>mm head</option>
+              <option value="m_head">m head</option>
+              <option value="pressure_pa">Pa</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="soilThicknessUnitSelect">Soil thickness unit</label>
+            <select id="soilThicknessUnitSelect" class="field-input">
+              <option value="mm" selected>mm</option>
+              <option value="m">m</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="singleTimeCodeInput">Single time code</label>
+            <input id="singleTimeCodeInput" class="field-input" type="text" value="0001" />
+          </div>
+        </div>
+        <label class="checkbox-row"><input id="useMultipleTimestepsInput" type="checkbox" checked /> Use all detected time steps</label>
+      </div>
+
+      <div class="section-block">
+        <div class="section-title bar-title">
+          <span>Soil parameters</span>
+          <div class="inline-tools">
+            <input id="formSoilTypeCount" type="number" min="1" value="3" class="mini-number" />
+            <button id="generateFormInputsBtn" type="button" class="small-btn">Generate</button>
+          </div>
+        </div>
+        <div id="formSoilTypeContainer" class="soil-param-list"></div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-title">Run FORM</div>
+        <button id="runFormBtn" class="primary-btn" type="button">Run</button>
+        <div id="runStatusBox" class="summary-box">Ready</div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-title">Result layers</div>
+        <div id="resultLayerControls" class="result-layers">No FORM outputs yet.</div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
