@@ -44,10 +44,10 @@ On Render:
 2. Render should detect `render.yaml`.
 3. Deploy.
 4. After deploy, copy the backend URL, for example:
-   `https://landslide-hazard-app.onrender.com`
+   `https://landslide-hazard-form-backend.onrender.com`
 
 You can test it by opening:
-`https://your-backend-url/api/health`
+`https://landslide-hazard-app/api/health`
 
 ### 2. Set frontend config
 
