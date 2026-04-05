@@ -220,11 +220,21 @@
     if (sourceCRS === 'EPSG:4326' || sourceCRS === 'EPSG:4490') return [x, y];
     return proj4(sourceCRS, 'EPSG:4326', [x, y]);
   }
+  function fallbackBounds() {
+    return [[defaultMapView.center[0] - 0.08, defaultMapView.center[1] - 0.08], [defaultMapView.center[0] + 0.08, defaultMapView.center[1] + 0.08]];
+  }
+
   function ascBoundsToLatLngBounds(asc, selectedCRS) {
     const xMin = asc.xll, yMin = asc.yll, xMax = asc.xll + asc.width * asc.cellsize, yMax = asc.yll + asc.height * asc.cellsize;
-    if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) return [[yMin, xMin], [yMax, xMax]];
-    const ll = transformPointToWGS84(xMin, yMin, selectedCRS); const ur = transformPointToWGS84(xMax, yMax, selectedCRS);
-    return [[ll[1], ll[0]], [ur[1], ur[0]]];
+    try {
+      if (selectedCRS === 'EPSG:4326' || selectedCRS === 'EPSG:4490' || (selectedCRS === 'auto' && ascLooksGeographic(asc))) return [[yMin, xMin], [yMax, xMax]];
+      const ll = transformPointToWGS84(xMin, yMin, selectedCRS); const ur = transformPointToWGS84(xMax, yMax, selectedCRS);
+      if (![ll[0], ll[1], ur[0], ur[1]].every(Number.isFinite)) throw new Error('Invalid transformed bounds');
+      return [[ll[1], ll[0]], [ur[1], ur[0]]];
+    } catch (err) {
+      addConsoleLine(consoleContent, 'warn', `Using fallback display bounds for raster preview: ${err.message}`);
+      return fallbackBounds();
+    }
   }
 
   function registerLayer(layerKey, layerLabel, leafletLayer, bounds, stats, onVisibleChange) {
@@ -279,7 +289,7 @@
       if (v > max) max = v;
     }
     const canvas = renderGridToCanvas(width, height, grid, min, max);
-    let bounds = [[29.60, 119.85], [29.85, 120.10]];
+    let bounds = fallbackBounds();
     try {
       const bbox = image.getBoundingBox();
       if (bbox && bbox.length === 4) {
@@ -287,10 +297,12 @@
         else if (typeof proj4 !== 'undefined') {
           const ll = transformPointToWGS84(bbox[0], bbox[1], crsSelect.value || 'EPSG:4549');
           const ur = transformPointToWGS84(bbox[2], bbox[3], crsSelect.value || 'EPSG:4549');
-          bounds = [[ll[1], ll[0]], [ur[1], ur[0]]];
+          if ([ll[0], ll[1], ur[0], ur[1]].every(Number.isFinite)) bounds = [[ll[1], ll[0]], [ur[1], ur[0]]];
         }
       }
-    } catch (err) {}
+    } catch (err) {
+      addConsoleLine(consoleContent, 'warn', `Using fallback display bounds for TIFF preview: ${err.message}`);
+    }
     const overlay = L.imageOverlay(canvas.toDataURL('image/png'), bounds, { opacity: 0.9 }).addTo(map);
     registerLayer(layerKey, layerLabel, overlay, bounds, { min, max, width, height });
     uploadStatus.textContent = `Loaded ${getSafeFileName(file)}`;
@@ -523,34 +535,12 @@
 
   function updateStageEventSelectors() {
     const events = state.ml.detectedEvents.slice();
-    const previousTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
-    const previousVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
     const previousTrain = new Set(Array.from(stage1TrainEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    const previousVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    const previousTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
 
-    stage1TestEventsBox.innerHTML = '';
-    events.forEach((eventId, idx) => {
-      const checked = previousTest.size ? previousTest.has(eventId) : idx < Math.min(4, events.length);
-      const label = document.createElement('label');
-      label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
-      label.querySelector('input').addEventListener('change', updateStageEventSelectors);
-      stage1TestEventsBox.appendChild(label);
-    });
-
-    const checkedTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
-    stage1ValEventsBox.innerHTML = '';
-    events.filter(e => !checkedTest.has(e)).forEach((eventId, idx) => {
-      const defaultChecked = idx < Math.min(2, Math.max(events.length - checkedTest.size, 0));
-      const checked = previousVal.size ? previousVal.has(eventId) : defaultChecked;
-      const label = document.createElement('label');
-      label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
-      label.querySelector('input').addEventListener('change', updateStageEventSelectors);
-      stage1ValEventsBox.appendChild(label);
-    });
-
-    const checkedVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
-    const remainingForTrain = events.filter(e => !checkedTest.has(e) && !checkedVal.has(e));
     stage1TrainEventsBox.innerHTML = '';
-    remainingForTrain.forEach(eventId => {
+    events.forEach(eventId => {
       const checked = previousTrain.size ? previousTrain.has(eventId) : true;
       const label = document.createElement('label');
       label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
@@ -559,7 +549,27 @@
     });
 
     const checkedTrain = new Set(Array.from(stage1TrainEventsBox.querySelectorAll('input:checked')).map(i => i.value));
-    const remainingForStage2 = events.filter(e => !checkedTest.has(e) && !checkedVal.has(e) && !checkedTrain.has(e));
+    stage1ValEventsBox.innerHTML = '';
+    events.filter(e => !checkedTrain.has(e)).forEach((eventId, idx) => {
+      const defaultChecked = previousVal.size ? previousVal.has(eventId) : idx < Math.min(2, Math.max(events.length - checkedTrain.size, 0));
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" value="${eventId}" ${defaultChecked ? 'checked' : ''}/> ${eventId}`;
+      label.querySelector('input').addEventListener('change', updateStageEventSelectors);
+      stage1ValEventsBox.appendChild(label);
+    });
+
+    const checkedVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    stage1TestEventsBox.innerHTML = '';
+    events.filter(e => !checkedTrain.has(e) && !checkedVal.has(e)).forEach((eventId, idx) => {
+      const defaultChecked = previousTest.size ? previousTest.has(eventId) : idx < Math.min(4, Math.max(events.length - checkedTrain.size - checkedVal.size, 0));
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" value="${eventId}" ${defaultChecked ? 'checked' : ''}/> ${eventId}`;
+      label.querySelector('input').addEventListener('change', updateStageEventSelectors);
+      stage1TestEventsBox.appendChild(label);
+    });
+
+    const checkedTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    const remainingForStage2 = events.filter(e => !checkedTrain.has(e) && !checkedVal.has(e) && !checkedTest.has(e));
     stage2EventSelect.innerHTML = remainingForStage2.map(e => `<option value="${e}">${e}</option>`).join('');
     if (!remainingForStage2.length) stage2EventSelect.innerHTML = '<option value=>No remaining event</option>';
   }
@@ -600,11 +610,13 @@
       const row = document.createElement('div'); row.className = 'layer-row';
       row.innerHTML = `<span>${displayName}</span><div class="layer-actions"><label><input type="checkbox"/> View</label></div>`;
       const checkbox = row.querySelector('input');
-      const key = `ml_map_${idx}_${getSafeFileName(file, `map_${idx}`).replace(/[^a-zA-Z0-9_\-.]/g, '_')}`;
+      const uniquePart = (file.webkitRelativePath || getSafeFileName(file, `map_${idx}`)).replace(/[^a-zA-Z0-9_\-.]/g, '_');
+      const key = `ml_map_${idx}_${uniquePart}`;
       checkbox.addEventListener('change', async () => {
         try {
           if (checkbox.checked) {
-            await displayAscFile(file, key, displayName);
+            const overlay = await displayRasterFile(file, key, displayName);
+            if (!overlay) throw new Error('No preview overlay was created');
             addConsoleLine(mlConsoleContent, 'info', `Displayed ML map: ${displayName}`);
           } else {
             removeLayerByKey(key);
@@ -750,21 +762,47 @@
   }
 
   Object.entries(rasterConfigs).forEach(([key, cfg]) => {
-    cfg.input.addEventListener('change', () => {
+    const stateKey = key === 'soilType' ? 'soilType' : key === 'soilThickness' ? 'soilThickness' : key;
+
+    cfg.input.addEventListener('change', async () => {
       const file = cfg.input.files && cfg.input.files[0];
       if (!file) return;
-      const stateKey = key === 'soilType' ? 'soilType' : key === 'soilThickness' ? 'soilThickness' : key;
       onRasterSelected(stateKey, file);
-      cfg.viewToggle.onchange = async () => {
-        const layerKey = `base_${stateKey}`;
-        try {
-          if (cfg.viewToggle.checked) await displayRasterFile(file, layerKey, getSafeFileName(file, stateKey));
-          else removeLayerByKey(layerKey);
-        } catch (err) {
-          cfg.viewToggle.checked = false;
-          addConsoleLine(consoleContent, 'err', `Failed to display ${getSafeFileName(file, stateKey)}: ${err.message}`);
+      try {
+        await displayRasterFile(file, `base_${stateKey}`, cfg.label);
+        cfg.viewToggle.checked = true;
+        addConsoleLine(consoleContent, 'info', `${cfg.label} loaded: ${getSafeFileName(file, stateKey)}`);
+      } catch (err) {
+        cfg.viewToggle.checked = false;
+        addConsoleLine(consoleContent, 'err', `Failed to load ${getSafeFileName(file, stateKey)}: ${err.message}`);
+        setStatus(uploadStatus, `Failed to load ${getSafeFileName(file, stateKey)}`);
+      }
+    });
+
+    cfg.viewToggle.addEventListener('change', async () => {
+      const file = state.formInputs[stateKey];
+      const layerKey = `base_${stateKey}`;
+      if (!file) return;
+      try {
+        if (cfg.viewToggle.checked) {
+          if (rasterLayers[layerKey] && rasterLayers[layerKey].layer) {
+            rasterLayers[layerKey].layer.addTo(map);
+            rasterLayers[layerKey].visible = true;
+            activeLayerKey = layerKey;
+            map.fitBounds(rasterLayers[layerKey].bounds, { padding: [20, 20] });
+            updateRasterStats(rasterLayers[layerKey].min, rasterLayers[layerKey].max, rasterLayers[layerKey].width, rasterLayers[layerKey].height, rasterLayers[layerKey].label);
+            updateColorbar(rasterLayers[layerKey].min, rasterLayers[layerKey].max);
+            mapEmptyNote.style.display = 'none';
+          } else {
+            await displayRasterFile(file, layerKey, cfg.label);
+          }
+        } else {
+          removeLayerByKey(layerKey);
         }
-      };
+      } catch (err) {
+        cfg.viewToggle.checked = false;
+        addConsoleLine(consoleContent, 'err', `Failed to display ${getSafeFileName(file, stateKey)}: ${err.message}`);
+      }
     });
   });
 

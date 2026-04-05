@@ -49,20 +49,20 @@
         </div>
         <div class="upload-card">
           <div class="upload-row-head"><span>Slope map</span><label><input id="slopeViewToggle" type="checkbox" checked disabled /> View</label></div>
-          <input id="slopeFileInput" type="file" accept=".asc" hidden />
-          <label for="slopeFileInput" class="dropbox required">Upload slope.asc</label>
+          <input id="slopeFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+          <label for="slopeFileInput" class="dropbox required">Upload slope raster</label>
           <div id="slopeSelectedFile" class="file-chip">None</div>
         </div>
         <div class="upload-card">
           <div class="upload-row-head"><span>Soil type map</span><label><input id="soilTypeViewToggle" type="checkbox" checked disabled /> View</label></div>
-          <input id="soilTypeFileInput" type="file" accept=".asc" hidden />
-          <label for="soilTypeFileInput" class="dropbox required">Upload soiltype.asc</label>
+          <input id="soilTypeFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+          <label for="soilTypeFileInput" class="dropbox required">Upload soil type raster</label>
           <div id="soilTypeSelectedFile" class="file-chip">None</div>
         </div>
         <div class="upload-card">
           <div class="upload-row-head"><span>Soil thickness map</span><label><input id="soilThicknessViewToggle" type="checkbox" checked disabled /> View</label></div>
-          <input id="soilThicknessFileInput" type="file" accept=".asc" hidden />
-          <label for="soilThicknessFileInput" class="dropbox required">Upload soilthickness.asc</label>
+          <input id="soilThicknessFileInput" type="file" accept=".asc,.tif,.tiff" hidden />
+          <label for="soilThicknessFileInput" class="dropbox required">Upload soil thickness raster</label>
           <div id="soilThicknessSelectedFile" class="file-chip">None</div>
         </div>
       </div>
@@ -189,8 +189,8 @@
         <div class="section-block">
           <div class="section-title">Machine learning model setup</div>
           <div class="field-group"><div class="field-label">STAGE1_TRAIN_EVENTS</div><div id="stage1TrainEventsBox" class="checkbox-list-box"></div></div>
-          <div class="field-group"><div class="field-label">STAGE1_TEST_EVENTS</div><div id="stage1TestEventsBox" class="checkbox-list-box"></div></div>
           <div class="field-group"><div class="field-label">STAGE1_VAL_EVENTS</div><div id="stage1ValEventsBox" class="checkbox-list-box"></div></div>
+          <div class="field-group"><div class="field-label">STAGE1_TEST_EVENTS</div><div id="stage1TestEventsBox" class="checkbox-list-box"></div></div>
           <label class="checkbox-row"><input id="stage2EnabledInput" type="checkbox" checked /> Activate Stage 2</label>
           <div id="stage2ConfigWrap">
             <div class="field-group"><label class="field-label" for="stage2EventSelect">STAGE2_EVENT</label><select id="stage2EventSelect" class="field-input"></select></div>
