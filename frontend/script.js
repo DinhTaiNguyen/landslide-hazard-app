@@ -26,6 +26,7 @@
   const mlMapLayersList = document.getElementById('mlMapLayersList');
   const mlFormOutputsFolderInput = document.getElementById('mlFormOutputsFolderInput');
   const mlFormOutputsSummary = document.getElementById('mlFormOutputsSummary');
+  const mlFormOutputLayersList = document.getElementById('mlFormOutputLayersList');
   const mlDetectedEventsBox = document.getElementById('mlDetectedEventsBox');
   const rainfallEventContainer = document.getElementById('rainfallEventContainer');
   const stage1TrainEventsBox = document.getElementById('stage1TrainEventsBox');
@@ -199,7 +200,7 @@
       if (!Number.isFinite(val) || (Number.isFinite(nodata) && val === nodata)) grid[i] = NaN;
       else { grid[i] = val; min = Math.min(min, val); max = Math.max(max, val); }
     });
-    return { width: ncols, height: nrows, grid, min, max, xll: header.xllcorner ?? header.xllcenter ?? 0, yll: header.yllcorner ?? header.yllcenter ?? 0, cellsize: header.cellsize ?? 1 };
+    return { width: ncols, height: nrows, grid, min, max, xll: header.xllcorner ?? header.xllcenter ?? 0, yll: header.yllcorner ?? header.yllcenter ?? 0, xOriginType: Number.isFinite(header.xllcenter) ? 'center' : 'corner', yOriginType: Number.isFinite(header.yllcenter) ? 'center' : 'corner', cellsize: header.cellsize ?? 1 };
   }
 
   function renderGridToCanvas(width, height, grid, min, max) {
@@ -240,7 +241,10 @@
   }
 
   function ascBoundsToLatLngBounds(asc, selectedCRS) {
-    const xMin = asc.xll, yMin = asc.yll, xMax = asc.xll + asc.width * asc.cellsize, yMax = asc.yll + asc.height * asc.cellsize;
+    const xMin = asc.xOriginType === 'center' ? asc.xll - 0.5 * asc.cellsize : asc.xll;
+    const yMin = asc.yOriginType === 'center' ? asc.yll - 0.5 * asc.cellsize : asc.yll;
+    const xMax = xMin + asc.width * asc.cellsize;
+    const yMax = yMin + asc.height * asc.cellsize;
     try {
       const effectiveCRS = selectedCRS === 'auto' ? getEffectivePreviewCRS(asc) : selectedCRS;
       if (effectiveCRS === 'EPSG:4326' || effectiveCRS === 'EPSG:4490') return [[yMin, xMin], [yMax, xMax]];
@@ -655,6 +659,46 @@
     });
   }
 
+
+  function renderMlFormOutputLayerControls() {
+    mlFormOutputLayersList.innerHTML = '';
+    if (!state.ml.formOutputFiles.length) {
+      mlFormOutputLayersList.innerHTML = '<div class="summary-box">No FORM output layers detected yet.</div>';
+      return;
+    }
+    const files = state.ml.formOutputFiles.slice().sort((a, b) => {
+      const ap = (a.webkitRelativePath || a.name).toLowerCase();
+      const bp = (b.webkitRelativePath || b.name).toLowerCase();
+      const aw = /pof\.asc$/.test(ap) ? 0 : 1;
+      const bw = /pof\.asc$/.test(bp) ? 0 : 1;
+      return aw - bw || ap.localeCompare(bp);
+    });
+    files.forEach((file, idx) => {
+      const displayName = file.webkitRelativePath || getSafeFileName(file, `form_${idx + 1}.asc`);
+      const row = document.createElement('div'); row.className = 'layer-row';
+      row.innerHTML = `<span>${displayName}</span><div class="layer-actions"><label><input type="checkbox" ${/PoF\.asc$/i.test(displayName) ? 'checked' : ''}/> View</label></div>`;
+      const checkbox = row.querySelector('input');
+      const uniquePart = displayName.replace(/[^a-zA-Z0-9_\-.]/g, '_');
+      const key = `ml_form_output_${idx}_${uniquePart}`;
+      checkbox.addEventListener('change', async () => {
+        try {
+          if (checkbox.checked) {
+            const overlay = await displayRasterFile(file, key, displayName);
+            if (!overlay) throw new Error('No preview overlay was created');
+            addConsoleLine(mlConsoleContent, 'info', `Displayed FORM output layer: ${displayName}`);
+          } else {
+            removeLayerByKey(key);
+          }
+        } catch (err) {
+          checkbox.checked = false;
+          addConsoleLine(mlConsoleContent, 'err', `Failed to display ${displayName}: ${err.message}`);
+        }
+      });
+      mlFormOutputLayersList.appendChild(row);
+      if (checkbox.checked) displayRasterFile(file, key, displayName).catch(() => {});
+    });
+  }
+
   function parseDetectedEventsFromFormFiles(files) {
     const set = new Set();
     files.forEach(file => {
@@ -842,6 +886,7 @@
     state.ml.detectedEvents = parseDetectedEventsFromFormFiles(state.ml.formOutputFiles);
     mlFormOutputsSummary.textContent = state.ml.formOutputFiles.length ? `${state.ml.formOutputFiles.length} files uploaded from FORM outputs folder.` : 'No FORM output files detected.';
     mlDetectedEventsBox.textContent = state.ml.detectedEvents.length ? `Detected event_id from PoF.asc folders:\n${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected.';
+    renderMlFormOutputLayerControls();
     renderRainfallBoxes();
     renderStageEventBoxes();
     updateInputSummary();
