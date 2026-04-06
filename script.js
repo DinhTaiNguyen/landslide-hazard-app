@@ -1,5 +1,5 @@
 (function () {
-  const defaultBackend = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'http://127.0.0.1:8000';
+  const defaultBackend = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'https://landslide-hazard-app.onrender.com';
   const backendUrlInput = document.getElementById('backendUrlInput');
   const checkBackendBtn = document.getElementById('checkBackendBtn');
   const backendStatus = document.getElementById('backendStatus');
@@ -92,6 +92,13 @@
   let activeLayerKey = null;
   const rasterLayers = {};
   const defaultMapView = { center: [29.72, 119.96], zoom: 10 };
+
+  if (typeof proj4 !== 'undefined') {
+    try { proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs +type=crs'); } catch (e) {}
+    try { proj4.defs('EPSG:4490', '+proj=longlat +ellps=GRS80 +no_defs +type=crs'); } catch (e) {}
+    try { proj4.defs('EPSG:4549', '+proj=tmerc +lat_0=0 +lon_0=120 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs +type=crs'); } catch (e) {}
+  }
+
   const baseLayerConfigs = {
     osm: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', options: { attribution: '© OpenStreetMap contributors' } },
     terrain: { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', options: { attribution: '© OpenTopoMap contributors' } },
@@ -218,7 +225,10 @@
   }
   function transformPointToWGS84(x, y, sourceCRS) {
     if (sourceCRS === 'EPSG:4326' || sourceCRS === 'EPSG:4490') return [x, y];
-    return proj4(sourceCRS, 'EPSG:4326', [x, y]);
+    if (typeof proj4 === 'undefined') throw new Error('proj4 is not available');
+    const pt = proj4(sourceCRS, 'EPSG:4326', [x, y]);
+    if (!pt || !Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) throw new Error(`Failed CRS transform from ${sourceCRS}`);
+    return pt;
   }
   function getEffectivePreviewCRS(ascLike = null) {
     const selected = crsSelect && crsSelect.value ? crsSelect.value : 'EPSG:4549';
@@ -234,9 +244,16 @@
     try {
       const effectiveCRS = selectedCRS === 'auto' ? getEffectivePreviewCRS(asc) : selectedCRS;
       if (effectiveCRS === 'EPSG:4326' || effectiveCRS === 'EPSG:4490') return [[yMin, xMin], [yMax, xMax]];
-      const ll = transformPointToWGS84(xMin, yMin, effectiveCRS); const ur = transformPointToWGS84(xMax, yMax, effectiveCRS);
-      if (![ll[0], ll[1], ur[0], ur[1]].every(Number.isFinite)) throw new Error('Invalid transformed bounds');
-      return [[ll[1], ll[0]], [ur[1], ur[0]]];
+      const corners = [
+        transformPointToWGS84(xMin, yMin, effectiveCRS),
+        transformPointToWGS84(xMax, yMin, effectiveCRS),
+        transformPointToWGS84(xMin, yMax, effectiveCRS),
+        transformPointToWGS84(xMax, yMax, effectiveCRS),
+      ];
+      const lons = corners.map(c => c[0]);
+      const lats = corners.map(c => c[1]);
+      if (![...lons, ...lats].every(Number.isFinite)) throw new Error('Invalid transformed bounds');
+      return [[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]];
     } catch (err) {
       addConsoleLine(consoleContent, 'warn', `Using fallback display bounds for raster preview: ${err.message}`);
       return fallbackBounds();
@@ -273,7 +290,7 @@
   function addAscLayerFromParsed(asc, fileName, layerKey, layerLabel) {
     const canvas = renderGridToCanvas(asc.width, asc.height, asc.grid, asc.min, asc.max);
     const bounds = ascBoundsToLatLngBounds(asc, 'EPSG:4549');
-    const overlay = L.imageOverlay(canvas.toDataURL('image/png'), bounds, { opacity: 0.9 }).addTo(map);
+    const overlay = L.imageOverlay(canvas.toDataURL('image/png'), bounds, { opacity: 1.0 }).addTo(map);
     registerLayer(layerKey, layerLabel, overlay, bounds, { min: asc.min, max: asc.max, width: asc.width, height: asc.height });
     uploadStatus.textContent = `Loaded ${fileName}`;
     return overlay;
@@ -310,7 +327,7 @@
     } catch (err) {
       addConsoleLine(consoleContent, 'warn', `Using fallback display bounds for TIFF preview: ${err.message}`);
     }
-    const overlay = L.imageOverlay(canvas.toDataURL('image/png'), bounds, { opacity: 0.9 }).addTo(map);
+    const overlay = L.imageOverlay(canvas.toDataURL('image/png'), bounds, { opacity: 1.0 }).addTo(map);
     registerLayer(layerKey, layerLabel, overlay, bounds, { min, max, width, height });
     uploadStatus.textContent = `Loaded ${getSafeFileName(file)}`;
     return overlay;
@@ -576,9 +593,9 @@
     });
 
     const checkedTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
-    const remainingForStage2 = events.filter(e => !checkedTrain.has(e) && !checkedVal.has(e) && !checkedTest.has(e));
-    stage2EventSelect.innerHTML = remainingForStage2.map(e => `<option value="${e}">${e}</option>`).join('');
-    if (!remainingForStage2.length) stage2EventSelect.innerHTML = '<option value=>No remaining event</option>';
+    const stage2Candidates = events.filter(e => checkedTest.has(e));
+    stage2EventSelect.innerHTML = stage2Candidates.map(e => `<option value="${e}">${e}</option>`).join('');
+    if (!stage2Candidates.length) stage2EventSelect.innerHTML = '<option value=>Select at least one Stage 1 test event</option>';
   }
 
   function renderStageEventBoxes() {

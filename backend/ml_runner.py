@@ -5,6 +5,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+import pickle
 
 import matplotlib
 matplotlib.use("Agg")
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import SGDClassifier, SGDRegressor
+from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.metrics import mean_absolute_error, roc_auc_score, roc_curve
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -252,27 +253,35 @@ def run_stage1(train_df, val_df, test_df, preprocessor, config: MLConfig, log: L
     X_train = preprocessor.fit_transform(train_df)
     X_val = preprocessor.transform(val_df)
     X_test = preprocessor.transform(test_df)
+    if hasattr(X_train, 'toarray'): X_train = X_train.toarray().astype(np.float32, copy=False)
+    if hasattr(X_val, 'toarray'): X_val = X_val.toarray().astype(np.float32, copy=False)
+    if hasattr(X_test, 'toarray'): X_test = X_test.toarray().astype(np.float32, copy=False)
     y_train = train_df['pof_form'].astype(np.float32).values
     y_val = val_df['pof_form'].astype(np.float32).values
     y_test = test_df['pof_form'].astype(np.float32).values
 
-    model = SGDRegressor(
-        loss='huber',
-        penalty='l2',
+    model = MLPRegressor(
+        hidden_layer_sizes=(128, 64, 32),
+        activation='relu',
+        solver='adam',
         alpha=max(config.weight_decay, 1e-6),
-        learning_rate='optimal',
-        eta0=max(config.lr_stage1, 1e-4),
+        batch_size=min(max(int(config.batch_size_stage1), 64), 256),
+        learning_rate_init=max(config.lr_stage1, 1e-4),
+        max_iter=1,
+        warm_start=True,
         random_state=config.random_seed,
+        shuffle=True,
     )
-    best_state = None
+    best_model = None
     best_val = np.inf
     patience = 0
     train_losses = []
     val_losses = []
-    for epoch in range(max(5, min(config.epochs_stage1, 20))):
-        model.partial_fit(X_train, y_train)
-        train_pred = np.clip(model.predict(X_train), 0.0, 1.0)
-        val_pred = np.clip(model.predict(X_val), 0.0, 1.0)
+    n_epochs = max(10, min(int(config.epochs_stage1), 40))
+    for epoch in range(n_epochs):
+        model.fit(X_train, y_train)
+        train_pred = np.clip(model.predict(X_train).astype(np.float32), 0.0, 1.0)
+        val_pred = np.clip(model.predict(X_val).astype(np.float32), 0.0, 1.0)
         train_mae = float(mean_absolute_error(y_train, train_pred))
         val_mae = float(mean_absolute_error(y_val, val_pred))
         train_losses.append(train_mae)
@@ -281,20 +290,20 @@ def run_stage1(train_df, val_df, test_df, preprocessor, config: MLConfig, log: L
         if improved:
             best_val = val_mae
             patience = 0
-            best_state = (model.coef_.copy(), float(model.intercept_[0]))
+            best_model = pickle.dumps(model)
         else:
             patience += 1
         log(f"Stage 1 epoch {epoch + 1} | train_mae={train_mae:.6f} | val_mae={val_mae:.6f}{' | best' if improved else ''}")
-        if patience >= min(config.patience_stage1, 5):
+        if patience >= min(int(config.patience_stage1), 8):
             log(f"Stage 1 early stopping at epoch {epoch + 1}")
             break
-    if best_state is not None:
-        model.coef_ = best_state[0]
-        model.intercept_ = np.array([best_state[1]], dtype=np.float64)
-    test_pred = np.clip(model.predict(X_test), 0.0, 1.0)
+    if best_model is not None:
+        model = pickle.loads(best_model)
+    test_pred = np.clip(model.predict(X_test).astype(np.float32), 0.0, 1.0)
     stage1_loss_png = plot_dir / 'stage1_loss.png'
     plot_loss(train_losses, val_losses, 'Stage 1 Loss', stage1_loss_png)
-    np.savez_compressed(model_dir / 'best_stage1_model.npz', coef=model.coef_, intercept=model.intercept_)
+    with open(model_dir / 'best_stage1_model.pkl', 'wb') as f:
+        pickle.dump(model, f)
     return model, test_pred, y_test, stage1_loss_png, float(mean_absolute_error(y_test, test_pred))
 
 
@@ -302,7 +311,7 @@ def run_stage2(dataset_csv: Path, dtypes: dict, stage1_preprocessor, stage1_mode
     label_arr, label_meta = read_asc(label_asc)
     label_flat = label_arr.ravel()
     label_nodata = label_meta['nodata_value']
-    s2_df = sample_rows_for_events(dataset_csv, [str(config.stage2_event)], dtypes, max_rows=12000, seed=config.random_seed + 3, log=log, label=f"Stage 2 event {config.stage2_event}")
+    s2_df = sample_rows_for_events(dataset_csv, [str(config.stage2_event)], dtypes, max_rows=10000, seed=config.random_seed + 3, log=log, label=f"Stage 2 event {config.stage2_event}")
     if s2_df.empty:
         raise ValueError(f"Stage 2 event {config.stage2_event} not found in dataset.")
     s2_df['label'] = label_flat[s2_df['grid_id'].astype(np.int64).values]
@@ -312,34 +321,42 @@ def run_stage2(dataset_csv: Path, dtypes: dict, stage1_preprocessor, stage1_mode
         raise ValueError('Stage 2 label map does not contain at least two classes after masking nodata.')
 
     X_stage1 = stage1_preprocessor.transform(s2_df)
+    if hasattr(X_stage1, 'toarray'): X_stage1 = X_stage1.toarray().astype(np.float32, copy=False)
     s2_df['base_logit'] = stage1_model.predict(X_stage1).astype(np.float32)
     s2_train_df, s2_val_df, s2_test_df = stratified_split_single_event(s2_df, 'label', config.stage2_train_frac, config.stage2_val_frac, config.stage2_test_frac, seed=config.random_seed)
     preprocessor2, stage2_num, stage2_cat = build_stage2_preprocessor(s2_df, cat_features)
     X_train = preprocessor2.fit_transform(s2_train_df)
     X_val = preprocessor2.transform(s2_val_df)
     X_test = preprocessor2.transform(s2_test_df)
+    if hasattr(X_train, 'toarray'): X_train = X_train.toarray().astype(np.float32, copy=False)
+    if hasattr(X_val, 'toarray'): X_val = X_val.toarray().astype(np.float32, copy=False)
+    if hasattr(X_test, 'toarray'): X_test = X_test.toarray().astype(np.float32, copy=False)
     y_train = s2_train_df['label'].astype(np.int8).values
     y_val = s2_val_df['label'].astype(np.int8).values
     y_test = s2_test_df['label'].astype(np.int8).values
 
-    model = SGDClassifier(
-        loss='log_loss',
-        penalty='l2',
+    model = MLPClassifier(
+        hidden_layer_sizes=(64, 32),
+        activation='relu',
+        solver='adam',
         alpha=max(config.weight_decay, 1e-6),
-        learning_rate='optimal',
-        eta0=max(config.lr_stage2, 1e-4),
+        batch_size=min(max(int(config.batch_size_stage2), 32), 128),
+        learning_rate_init=max(config.lr_stage2, 1e-4),
+        max_iter=1,
+        warm_start=True,
         random_state=config.random_seed,
+        shuffle=True,
     )
-    classes = np.array([0, 1], dtype=np.int8)
-    best_state = None
+    best_model = None
     best_val = np.inf
     patience = 0
     train_losses = []
     val_losses = []
-    for epoch in range(max(5, min(config.epochs_stage2, 20))):
-        model.partial_fit(X_train, y_train, classes=classes)
-        train_prob = model.predict_proba(X_train)[:, 1]
-        val_prob = model.predict_proba(X_val)[:, 1]
+    n_epochs = max(10, min(int(config.epochs_stage2), 40))
+    for epoch in range(n_epochs):
+        model.fit(X_train, y_train)
+        train_prob = model.predict_proba(X_train)[:, 1].astype(np.float32)
+        val_prob = model.predict_proba(X_val)[:, 1].astype(np.float32)
         train_mae = float(mean_absolute_error(y_train, train_prob))
         val_mae = float(mean_absolute_error(y_val, val_prob))
         train_losses.append(train_mae)
@@ -348,24 +365,26 @@ def run_stage2(dataset_csv: Path, dtypes: dict, stage1_preprocessor, stage1_mode
         if improved:
             best_val = val_mae
             patience = 0
-            best_state = (model.coef_.copy(), model.intercept_.copy())
+            best_model = pickle.dumps(model)
         else:
             patience += 1
         log(f"Stage 2 epoch {epoch + 1} | train_mae={train_mae:.6f} | val_mae={val_mae:.6f}{' | best' if improved else ''}")
-        if patience >= min(config.patience_stage2, 5):
+        if patience >= min(int(config.patience_stage2), 8):
             log(f"Stage 2 early stopping at epoch {epoch + 1}")
             break
-    if best_state is not None:
-        model.coef_ = best_state[0]
-        model.intercept_ = best_state[1]
-    test_prob = model.predict_proba(X_test)[:, 1]
+    if best_model is not None:
+        model = pickle.loads(best_model)
+    test_prob = model.predict_proba(X_test)[:, 1].astype(np.float32)
     geotop_prob = s2_test_df['pof_form'].astype(float).values
-    stage1_prob = np.clip(stage1_model.predict(stage1_preprocessor.transform(s2_test_df)), 0.0, 1.0)
+    X_test_stage1 = stage1_preprocessor.transform(s2_test_df)
+    if hasattr(X_test_stage1, 'toarray'): X_test_stage1 = X_test_stage1.toarray().astype(np.float32, copy=False)
+    stage1_prob = np.clip(stage1_model.predict(X_test_stage1), 0.0, 1.0)
     roc_png = plot_dir / 'roc_curve.png'
-    plot_roc_curve(y_test, {'GeoTOP-FORM': geotop_prob, 'Stage 1': stage1_prob, 'Stage 2': test_prob}, roc_png, f'ROC on {config.stage2_event}')
+    plot_roc_curve(y_test, {'GeoTOP-FORM': geotop_prob, 'Stage 1': stage1_prob[:len(y_test)], 'Stage 2': test_prob}, roc_png, f'ROC on {config.stage2_event}')
     stage2_loss_png = plot_dir / 'stage2_loss.png'
     plot_loss(train_losses, val_losses, 'Stage 2 Loss', stage2_loss_png)
-    np.savez_compressed(model_dir / 'best_stage2_model.npz', coef=model.coef_, intercept=model.intercept_)
+    with open(model_dir / 'best_stage2_model.pkl', 'wb') as f:
+        pickle.dump(model, f)
     summary = {
         'stage2_event': config.stage2_event,
         'stage2_test_rows': int(len(s2_test_df)),
@@ -393,10 +412,10 @@ def run_ml_pipeline(dataset_csv: Path, reference_asc: Path, config: MLConfig, ou
     if not train_events or not val_events or not test_events:
         raise ValueError('Training, validation, and testing event selections must all contain at least one valid event.')
 
-    log(f'Loading machine learning dataset from {dataset_csv.name} using ultra-low-memory mode')
-    train_df = sample_rows_for_events(dataset_csv, train_events, dtypes, max_rows=12000, seed=config.random_seed, log=log, label='Stage 1 training')
-    val_df = sample_rows_for_events(dataset_csv, val_events, dtypes, max_rows=6000, seed=config.random_seed + 1, log=log, label='Stage 1 validation')
-    test_df = sample_rows_for_events(dataset_csv, test_events, dtypes, max_rows=6000, seed=config.random_seed + 2, log=log, label='Stage 1 testing')
+    log(f'Loading machine learning dataset from {dataset_csv.name} using memory-optimised original-like neural-network mode')
+    train_df = sample_rows_for_events(dataset_csv, train_events, dtypes, max_rows=8000, seed=config.random_seed, log=log, label='Stage 1 training')
+    val_df = sample_rows_for_events(dataset_csv, val_events, dtypes, max_rows=4000, seed=config.random_seed + 1, log=log, label='Stage 1 validation')
+    test_df = sample_rows_for_events(dataset_csv, test_events, dtypes, max_rows=4000, seed=config.random_seed + 2, log=log, label='Stage 1 testing')
     if train_df.empty or val_df.empty or test_df.empty:
         raise ValueError('One of the Stage 1 splits is empty after loading the dataset.')
 
@@ -503,14 +522,14 @@ def run_ml_pipeline(dataset_csv: Path, reference_asc: Path, config: MLConfig, ou
     output_files[metrics_txt.name] = metrics_txt
 
     summary = {
-        'runtime_mode': 'ultra_low_memory_sgd',
+        'runtime_mode': 'memory_optimised_original_like_mlp',
         'stage1_train_events': train_events,
         'stage1_val_events': val_events,
         'stage1_test_events': test_events,
         'stage1_feature_count': len(num_features) + len(cat_features),
         'stage1_softlabel_mae': stage1_mae,
         'stage2_enabled': bool(stage2_enabled_and_ready),
-        'memory_strategy': 'chunked_sampling_plus_sgd_models',
+        'memory_strategy': 'chunked_sampling_plus_mlp_models',
         **stage2_summary,
     }
     return MLResult(summary=summary, output_files=output_files, plot_files=plot_files)
