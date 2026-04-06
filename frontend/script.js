@@ -223,7 +223,6 @@
   function getEffectivePreviewCRS(ascLike = null) {
     const selected = crsSelect && crsSelect.value ? crsSelect.value : 'EPSG:4549';
     if (selected && selected !== 'auto') return selected;
-    if (ascLike && ascLooksGeographic(ascLike)) return 'EPSG:4326';
     return 'EPSG:4549';
   }
   function fallbackBounds() {
@@ -273,7 +272,7 @@
 
   function addAscLayerFromParsed(asc, fileName, layerKey, layerLabel) {
     const canvas = renderGridToCanvas(asc.width, asc.height, asc.grid, asc.min, asc.max);
-    const bounds = ascBoundsToLatLngBounds(asc, crsSelect.value || 'auto');
+    const bounds = ascBoundsToLatLngBounds(asc, 'EPSG:4549');
     const overlay = L.imageOverlay(canvas.toDataURL('image/png'), bounds, { opacity: 0.9 }).addTo(map);
     registerLayer(layerKey, layerLabel, overlay, bounds, { min: asc.min, max: asc.max, width: asc.width, height: asc.height });
     uploadStatus.textContent = `Loaded ${fileName}`;
@@ -302,7 +301,7 @@
       if (bbox && bbox.length === 4) {
         if (bbox[0] >= -180 && bbox[2] <= 180 && bbox[1] >= -90 && bbox[3] <= 90) bounds = [[bbox[1], bbox[0]], [bbox[3], bbox[2]]];
         else if (typeof proj4 !== 'undefined') {
-          const effectiveCRS = getEffectivePreviewCRS();
+          const effectiveCRS = 'EPSG:4549';
           const ll = transformPointToWGS84(bbox[0], bbox[1], effectiveCRS);
           const ur = transformPointToWGS84(bbox[2], bbox[3], effectiveCRS);
           if ([ll[0], ll[1], ur[0], ur[1]].every(Number.isFinite)) bounds = [[ll[1], ll[0]], [ur[1], ur[0]]];
