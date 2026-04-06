@@ -567,9 +567,15 @@
     const previousVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
     const previousTest = new Set(Array.from(stage1TestEventsBox.querySelectorAll('input:checked')).map(i => i.value));
 
+    const hasPreviousSelection = previousTrain.size || previousVal.size || previousTest.size;
+    const defaultTestEvents = new Set(events.slice(-Math.min(4, events.length)));
+    const remainingAfterDefaultTest = events.filter(e => !defaultTestEvents.has(e));
+    const defaultValEvents = new Set(remainingAfterDefaultTest.slice(-Math.min(2, remainingAfterDefaultTest.length)));
+    const defaultTrainEvents = new Set(events.filter(e => !defaultTestEvents.has(e) && !defaultValEvents.has(e)));
+
     stage1TrainEventsBox.innerHTML = '';
     events.forEach(eventId => {
-      const checked = previousTrain.size ? previousTrain.has(eventId) : true;
+      const checked = hasPreviousSelection ? previousTrain.has(eventId) : defaultTrainEvents.has(eventId);
       const label = document.createElement('label');
       label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
       label.querySelector('input').addEventListener('change', updateStageEventSelectors);
@@ -577,21 +583,23 @@
     });
 
     const checkedTrain = new Set(Array.from(stage1TrainEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    const valCandidates = events.filter(e => !checkedTrain.has(e));
     stage1ValEventsBox.innerHTML = '';
-    events.filter(e => !checkedTrain.has(e)).forEach((eventId, idx) => {
-      const defaultChecked = previousVal.size ? previousVal.has(eventId) : idx < Math.min(2, Math.max(events.length - checkedTrain.size, 0));
+    valCandidates.forEach(eventId => {
+      const checked = hasPreviousSelection ? previousVal.has(eventId) : defaultValEvents.has(eventId);
       const label = document.createElement('label');
-      label.innerHTML = `<input type="checkbox" value="${eventId}" ${defaultChecked ? 'checked' : ''}/> ${eventId}`;
+      label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
       label.querySelector('input').addEventListener('change', updateStageEventSelectors);
       stage1ValEventsBox.appendChild(label);
     });
 
     const checkedVal = new Set(Array.from(stage1ValEventsBox.querySelectorAll('input:checked')).map(i => i.value));
+    const testCandidates = events.filter(e => !checkedTrain.has(e) && !checkedVal.has(e));
     stage1TestEventsBox.innerHTML = '';
-    events.filter(e => !checkedTrain.has(e) && !checkedVal.has(e)).forEach((eventId, idx) => {
-      const defaultChecked = previousTest.size ? previousTest.has(eventId) : idx < Math.min(4, Math.max(events.length - checkedTrain.size - checkedVal.size, 0));
+    testCandidates.forEach(eventId => {
+      const checked = hasPreviousSelection ? previousTest.has(eventId) : defaultTestEvents.has(eventId);
       const label = document.createElement('label');
-      label.innerHTML = `<input type="checkbox" value="${eventId}" ${defaultChecked ? 'checked' : ''}/> ${eventId}`;
+      label.innerHTML = `<input type="checkbox" value="${eventId}" ${checked ? 'checked' : ''}/> ${eventId}`;
       label.querySelector('input').addEventListener('change', updateStageEventSelectors);
       stage1TestEventsBox.appendChild(label);
     });
@@ -662,30 +670,30 @@
 
   function renderMlFormOutputLayerControls() {
     mlFormOutputLayersList.innerHTML = '';
-    if (!state.ml.formOutputFiles.length) {
-      mlFormOutputLayersList.innerHTML = '<div class="summary-box">No FORM output layers detected yet.</div>';
+    const pofFiles = state.ml.formOutputFiles
+      .filter(file => /pof\.asc$/i.test(file.webkitRelativePath || file.name))
+      .sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name));
+
+    if (!pofFiles.length) {
+      mlFormOutputLayersList.innerHTML = '<div class="summary-box">No PoF.asc layers detected yet.</div>';
       return;
     }
-    const files = state.ml.formOutputFiles.slice().sort((a, b) => {
-      const ap = (a.webkitRelativePath || a.name).toLowerCase();
-      const bp = (b.webkitRelativePath || b.name).toLowerCase();
-      const aw = /pof\.asc$/.test(ap) ? 0 : 1;
-      const bw = /pof\.asc$/.test(bp) ? 0 : 1;
-      return aw - bw || ap.localeCompare(bp);
-    });
-    files.forEach((file, idx) => {
-      const displayName = file.webkitRelativePath || getSafeFileName(file, `form_${idx + 1}.asc`);
+
+    pofFiles.forEach((file, idx) => {
+      const path = (file.webkitRelativePath || file.name).replace(/\\/g, '/');
+      const parts = path.split('/');
+      const eventId = parts.length >= 2 ? parts[parts.length - 2] : `event_${idx + 1}`;
+      const displayName = `${eventId} / PoF.asc`;
       const row = document.createElement('div'); row.className = 'layer-row';
-      row.innerHTML = `<span>${displayName}</span><div class="layer-actions"><label><input type="checkbox" ${/PoF\.asc$/i.test(displayName) ? 'checked' : ''}/> View</label></div>`;
+      row.innerHTML = `<span>${displayName}</span><div class="layer-actions"><label><input type="checkbox" ${idx === 0 ? 'checked' : ''}/> View</label></div>`;
       const checkbox = row.querySelector('input');
-      const uniquePart = displayName.replace(/[^a-zA-Z0-9_\-.]/g, '_');
-      const key = `ml_form_output_${idx}_${uniquePart}`;
+      const key = `ml_form_output_${eventId}_pof`;
       checkbox.addEventListener('change', async () => {
         try {
           if (checkbox.checked) {
             const overlay = await displayRasterFile(file, key, displayName);
             if (!overlay) throw new Error('No preview overlay was created');
-            addConsoleLine(mlConsoleContent, 'info', `Displayed FORM output layer: ${displayName}`);
+            addConsoleLine(mlConsoleContent, 'info', `Displayed FORM PoF layer: ${displayName}`);
           } else {
             removeLayerByKey(key);
           }
@@ -695,7 +703,7 @@
         }
       });
       mlFormOutputLayersList.appendChild(row);
-      if (checkbox.checked) displayRasterFile(file, key, displayName).catch(() => {});
+      if (idx === 0) displayRasterFile(file, key, displayName).catch(() => {});
     });
   }
 
@@ -884,8 +892,10 @@
   mlFormOutputsFolderInput.addEventListener('change', () => {
     state.ml.formOutputFiles = Array.from(mlFormOutputsFolderInput.files || []).filter(f => /\.(asc|txt|csv)$/i.test(f.name));
     state.ml.detectedEvents = parseDetectedEventsFromFormFiles(state.ml.formOutputFiles);
-    mlFormOutputsSummary.textContent = state.ml.formOutputFiles.length ? `${state.ml.formOutputFiles.length} files uploaded from FORM outputs folder.` : 'No FORM output files detected.';
-    mlDetectedEventsBox.textContent = state.ml.detectedEvents.length ? `Detected event_id from PoF.asc folders:\n${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected.';
+    const pofCount = state.ml.formOutputFiles.filter(f => /pof\.asc$/i.test(f.webkitRelativePath || f.name)).length;
+    mlFormOutputsSummary.textContent = pofCount ? `${pofCount} PoF.asc layers detected across ${state.ml.detectedEvents.length} event folder(s).` : 'No FORM output files detected.';
+    mlDetectedEventsBox.textContent = state.ml.detectedEvents.length ? `Detected event_id from PoF.asc folders:
+${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected.';
     renderMlFormOutputLayerControls();
     renderRainfallBoxes();
     renderStageEventBoxes();
