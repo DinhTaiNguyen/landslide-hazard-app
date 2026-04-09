@@ -1,7 +1,6 @@
 (function () {
   const defaultBackend = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'https://landslide-hazard-app.onrender.com';
   const backendUrlInput = document.getElementById('backendUrlInput');
-  const checkBackendBtn = document.getElementById('checkBackendBtn');
   const backendStatus = document.getElementById('backendStatus');
   const uploadStatus = document.getElementById('uploadStatus');
   const rasterStats = document.getElementById('rasterStats');
@@ -153,7 +152,7 @@
     satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', options: { attribution: '© Esri' } }
   };
 
-  function apiBase() { return String(backendUrlInput.value || '').replace(/\/$/, ''); }
+  function apiBase() { return String(backendUrlInput.value || state.backendUrl || defaultBackend || '').replace(/\/$/, ''); }
   function addConsoleLine(target, type, message) {
     const line = document.createElement('div');
     line.style.marginBottom = '6px';
@@ -163,7 +162,7 @@
     target.scrollTop = target.scrollHeight;
   }
   function setStatus(el, text) { if (el) el.textContent = text; }
-  function setBackendStatus(text, className) { backendStatus.textContent = text; backendStatus.className = className || ''; }
+  function setBackendStatus(text, className) { backendStatus.textContent = text; backendStatus.className = `status-pill ${className || ''}`.trim(); }
 
   async function checkBackend() {
     const url = apiBase();
@@ -465,14 +464,14 @@
     const card = document.createElement('div'); card.className = 'geotop-card';
     card.innerHTML = `
       <div class="geotop-header"><div class="geotop-title">GeoTOP folder ${index + 1}</div><div class="status-pill waiting">Waiting</div></div>
-      <div class="field-group"><label class="field-label">Optional event, for example 20260610</label><input class="field-input event-label-input" type="text" /></div>
+      <div class="field-help">Optional event, for example 20260610</div>
       <input type="file" class="pwp-folder-input" webkitdirectory directory multiple hidden />
       <button type="button" class="small-btn choose-folder-btn">Choose GeoTOP PWP folder</button>
       <div class="summary-box folder-summary">No folder uploaded yet.</div>
       <div class="toolbar-row buttons" style="margin-top:8px;"><button type="button" class="primary-btn run-btn">Run</button><button type="button" class="small-btn show-logs-btn">Show logs</button></div>
       <div class="layer-control-list result-layers"></div>
     `;
-    const obj = { el: card, statusEl: card.querySelector('.status-pill'), input: card.querySelector('.pwp-folder-input'), chooseBtn: card.querySelector('.choose-folder-btn'), runBtn: card.querySelector('.run-btn'), showLogsBtn: card.querySelector('.show-logs-btn'), folderSummary: card.querySelector('.folder-summary'), resultLayers: card.querySelector('.result-layers'), labelInput: card.querySelector('.event-label-input'), pwpFiles: [], jobId: null };
+    const obj = { el: card, statusEl: card.querySelector('.status-pill'), input: card.querySelector('.pwp-folder-input'), chooseBtn: card.querySelector('.choose-folder-btn'), runBtn: card.querySelector('.run-btn'), showLogsBtn: card.querySelector('.show-logs-btn'), folderSummary: card.querySelector('.folder-summary'), resultLayers: card.querySelector('.result-layers'), pwpFiles: [], jobId: null };
     obj.chooseBtn.addEventListener('click', () => obj.input.click());
     obj.input.addEventListener('change', () => {
       obj.pwpFiles = Array.from(obj.input.files || []);
@@ -532,7 +531,7 @@
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       card.jobId = data.job_id;
-      addConsoleLine(consoleContent, 'info', `FORM job ${data.job_id} started${card.labelInput.value ? ` for ${card.labelInput.value}` : ''}`);
+      addConsoleLine(consoleContent, 'info', `FORM job ${data.job_id} started`);
       pollJob(card.jobId, card, 'form');
     } catch (err) {
       setCardStatus(card, 'Failed', 'failed');
@@ -978,14 +977,13 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
   document.getElementById('resetViewBtn').addEventListener('click', () => map.setView(defaultMapView.center, defaultMapView.zoom));
   document.getElementById('fitLayerBtn').addEventListener('click', () => { if (activeLayerKey && rasterLayers[activeLayerKey]) map.fitBounds(rasterLayers[activeLayerKey].bounds, { padding: [20,20] }); });
   document.getElementById('clearLayerBtn').addEventListener('click', clearAllLayers);
-  checkBackendBtn.addEventListener('click', checkBackend);
   generateFormInputsBtn.addEventListener('click', createSoilInputs);
   generateGeotopRunsBtn.addEventListener('click', createGeotopCards);
   runDataPrepBtn.addEventListener('click', runDataPreparation);
   runMlBtn.addEventListener('click', runMachineLearning);
   stage2EnabledInput.addEventListener('change', () => { stage2ConfigWrap.style.display = stage2EnabledInput.checked ? 'block' : 'none'; });
 
-  backendUrlInput.value = state.backendUrl;
+  backendUrlInput.value = state.backendUrl || defaultBackend;
   initMap();
   createSoilInputs();
   createGeotopCards();

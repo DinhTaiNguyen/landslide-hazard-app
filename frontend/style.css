@@ -24,6 +24,7 @@ body { overflow: hidden; }
 .brand-title { font-weight: 700; }
 .brand-subtitle { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .backend-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.backend-label { font-weight: 700; color: #dce8f8; }
 .backend-line input { min-width: 260px; }
 .side-panel, .center-panel { padding: 14px; display: flex; flex-direction: column; min-height: 0; }
 .panel-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
@@ -74,7 +75,12 @@ body { overflow: hidden; }
 .viz-panel.active, .right-subpanel.active { display: block; }
 .map-wrap { position: relative; flex: 1 1 auto; min-height: 320px; height: 50%; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,.06); }
 #map { width: 100%; height: 100%; background: #07101a; }
-.map-overlay-controls { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 700; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-radius: 12px; background: rgba(15,22,34,.72); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(6px); }
+.map-overlay-controls { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 700; display: flex; justify-content: center; pointer-events: none; }
+.map-toolbar-card { width: min(720px, calc(100% - 24px)); padding: 10px 12px; border-radius: 14px; background: rgba(15,22,34,.78); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(6px); box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: auto; }
+.map-toolbar-grid { display: grid; grid-template-columns: minmax(180px, 220px) 1fr; gap: 12px; align-items: end; }
+.toolbar-field { display: flex; flex-direction: column; gap: 6px; }
+.toolbar-field label { font-size: 12px; font-weight: 700; color: #dce8f8; }
+.toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .toolbar-row { display: flex; align-items: center; gap: 8px; }
 .toolbar-row.buttons { flex-wrap: wrap; }
 .map-empty-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 500; text-align: center; padding: 18px 22px; background: rgba(10,18,28,.78); border: 1px solid rgba(255,255,255,.08); border-radius: 14px; color: var(--text); pointer-events: none; }

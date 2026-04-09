@@ -19,10 +19,9 @@
         </div>
       </div>
       <div class="backend-line">
-        <label for="backendUrlInput">Backend URL</label>
-        <input id="backendUrlInput" type="text" placeholder="https://your-backend.onrender.com" />
-        <button id="checkBackendBtn" type="button" class="small-btn">Check</button>
-        <span id="backendStatus">Waiting</span>
+        <span class="backend-label">Backend URL</span>
+        <span id="backendStatus" class="status-pill waiting">Checking...</span>
+        <input id="backendUrlInput" type="hidden" />
       </div>
     </header>
 
@@ -79,19 +78,23 @@
       <div class="map-wrap">
         <div id="map"></div>
         <div class="map-overlay-controls">
-          <div class="toolbar-row">
-            <label for="basemapSelect">Basemap</label>
-            <select id="basemapSelect">
-              <option value="osm">OpenStreetMap</option>
-              <option value="terrain">Terrain</option>
-              <option value="voyager">Voyager</option>
-              <option value="satellite">Satellite</option>
-            </select>
-          </div>
-          <div class="toolbar-row buttons">
-            <button id="resetViewBtn" type="button" class="small-btn">Reset view</button>
-            <button id="fitLayerBtn" type="button" class="small-btn">Fit active layer</button>
-            <button id="clearLayerBtn" type="button" class="small-btn">Clear all layers</button>
+          <div class="map-toolbar-card">
+            <div class="map-toolbar-grid">
+              <div class="toolbar-field">
+                <label for="basemapSelect">Base map</label>
+                <select id="basemapSelect">
+                  <option value="osm">OpenStreetMap</option>
+                  <option value="terrain">Terrain</option>
+                  <option value="voyager">Voyager</option>
+                  <option value="satellite">Satellite</option>
+                </select>
+              </div>
+              <div class="toolbar-actions">
+                <button id="resetViewBtn" type="button" class="small-btn">Reset view</button>
+                <button id="fitLayerBtn" type="button" class="small-btn">Fit active layer</button>
+                <button id="clearLayerBtn" type="button" class="small-btn">Clear all layers</button>
+              </div>
+            </div>
           </div>
         </div>
         <div id="mapEmptyNote" class="map-empty-note">Upload or generate a raster to display it here.</div>
