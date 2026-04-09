@@ -15,13 +15,16 @@
         <img src="images/GeoXPM_logo_3D.png" alt="GeoXPM Logo" class="brand-logo" />
         <div>
           <div class="brand-title">MCG Landslide Hazard Mapping Predictor Pro</div>
-          <div class="brand-subtitle">FORM + Machine Learning workflow with direct web upload, job running logs, map preview, and downloadable results</div>
+          <div class="brand-subtitle">A reality-augmented, physics-informed framework for landslide hazard mapping</div>
         </div>
       </div>
-      <div class="backend-line">
-        <span class="backend-label">Backend URL</span>
-        <span id="backendStatus" class="status-pill waiting">Checking...</span>
-        <input id="backendUrlInput" type="hidden" />
+      <div class="backend-block">
+        <div class="backend-line">
+          <span class="backend-label">Backend URL</span>
+          <span id="backendStatus" class="status-pill waiting">Checking...</span>
+          <input id="backendUrlInput" type="hidden" />
+        </div>
+        <div id="currentTimeDisplay" class="current-time-line">Current Time (Australia/Melbourne): --</div>
       </div>
     </header>
 
@@ -224,6 +227,8 @@
       </div>
     </aside>
   </div>
+
+  <footer class="app-footer">Version 0.2 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; MCG Lab, Monash University, Clayton, Victoria, Australia (Contact: Ha.Bui@monash.edu)</footer>
 
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>

@@ -2,6 +2,7 @@
   const defaultBackend = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'https://landslide-hazard-app.onrender.com';
   const backendUrlInput = document.getElementById('backendUrlInput');
   const backendStatus = document.getElementById('backendStatus');
+  const currentTimeDisplay = document.getElementById('currentTimeDisplay');
   const uploadStatus = document.getElementById('uploadStatus');
   const rasterStats = document.getElementById('rasterStats');
   const consoleContent = document.getElementById('consoleContent');
@@ -169,6 +170,23 @@
   }
   function setStatus(el, text) { if (el) el.textContent = text; }
   function setBackendStatus(text, className) { backendStatus.textContent = text; backendStatus.className = `status-pill ${className || ''}`.trim(); }
+
+  function updateCurrentTime() {
+    if (!currentTimeDisplay) return;
+    const formatter = new Intl.DateTimeFormat('en-AU', {
+      timeZone: 'Australia/Melbourne',
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZoneName: 'longOffset'
+    });
+    currentTimeDisplay.textContent = `Current Time (Australia/Melbourne): ${formatter.format(new Date())}`;
+  }
 
   async function checkBackend() {
     const url = apiBase();
@@ -1076,5 +1094,7 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
   initMlHyperparameters();
   stage2ConfigWrap.style.display = stage2EnabledInput.checked ? 'block' : 'none';
   updateInputSummary();
+  updateCurrentTime();
+  setInterval(updateCurrentTime, 1000);
   checkBackend();
 })();

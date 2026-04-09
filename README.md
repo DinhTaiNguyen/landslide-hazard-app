@@ -45,3 +45,9 @@ The backend needs:
 - matplotlib
 - scikit-learn
 - torch
+
+
+Cloud Run / Cloud Build
+- cloudbuild.yaml deploys the backend from ./backend to Cloud Run.
+- Update service name, region, memory, and CORS as needed.
+- .gcloudignore keeps frontend assets and local caches out of backend source deploys.
