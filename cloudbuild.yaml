@@ -1,0 +1,25 @@
+steps:
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud run deploy ${_SERVICE_NAME} \
+          --source ./backend \
+          --region ${_REGION} \
+          --allow-unauthenticated \
+          --memory ${_MEMORY} \
+          --cpu ${_CPU} \
+          --timeout ${_TIMEOUT} \
+          --max-instances ${_MAX_INSTANCES} \
+          --set-env-vars CORS_ALLOW_ORIGINS=${_CORS_ALLOW_ORIGINS}
+options:
+  logging: CLOUD_LOGGING_ONLY
+substitutions:
+  _SERVICE_NAME: landslide-hazard-api
+  _REGION: australia-southeast1
+  _MEMORY: 4Gi
+  _CPU: '2'
+  _TIMEOUT: '3600'
+  _MAX_INSTANCES: '2'
+  _CORS_ALLOW_ORIGINS: '*'
