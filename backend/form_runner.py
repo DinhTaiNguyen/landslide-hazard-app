@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import resource
 from dataclasses import dataclass
 from math import erf, sqrt
 from pathlib import Path
@@ -340,6 +341,14 @@ def compute_beta_layer(
     return beta
 
 
+
+
+def current_memory_mb() -> float:
+    usage_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if usage_kb > 10_000_000:
+        return round(usage_kb / (1024 * 1024), 2)
+    return round(usage_kb / 1024, 2)
+
 def _log_stats(log: LogFn, name: str, arr: np.ndarray) -> None:
     valid = arr[np.isfinite(arr)]
     if valid.size == 0:
@@ -378,6 +387,8 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
     )
 
     params = build_parameter_rasters(soiltype, settings.soil_params)
+    log(f"Grid size: {rows} x {cols} ({rows * cols:,} cells)")
+    log(f"Base valid cells: {int(np.sum(~base_nodata_mask)):,}")
     effective_depth_stack = build_effective_depth_stack(soilthickness)
 
     rows, cols = slope.shape
@@ -434,7 +445,7 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
                 critical_psi_stack[k, update_mask] = psi_stack[k, update_mask]
 
         valid_cells = int(np.sum(np.isfinite(fs_min_time)))
-        log(f"Finished time code {time_code}: {valid_cells} valid cells")
+        log(f"Finished time code {time_code}: {valid_cells} valid cells | memory: {current_memory_mb()} MB")
 
     final_fos_stack = []
     final_beta_stack = []
@@ -470,7 +481,7 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
             prebuilt_params=params,
         )
         final_beta_stack.append(beta_layer)
-        log(f"Processed final layer {k + 1}/{N_LAYERS}")
+        log(f"Processed final layer {k + 1}/{N_LAYERS} | memory: {current_memory_mb()} MB")
 
     final_fos_stack = np.stack(final_fos_stack, axis=0)
     final_beta_stack = np.stack(final_beta_stack, axis=0)
@@ -514,7 +525,7 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
     log("Saved FS_min_depth.asc")
     log("Saved beta.asc")
     log("Saved PoF.asc")
-    log("FORM run completed")
+    log(f"FORM run completed | final memory: {current_memory_mb()} MB")
 
     summary = {
         "rows": str(rows),

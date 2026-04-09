@@ -11,6 +11,7 @@
   const dataPrepContent = document.getElementById('dataPrepContent');
   const mlPlotsContent = document.getElementById('mlPlotsContent');
   const dataPrepStatus = document.getElementById('dataPrepStatus');
+  const dataPrepDownloads = document.getElementById('dataPrepDownloads');
   const mlRunStatus = document.getElementById('mlRunStatus');
   const geotopRunCards = document.getElementById('geotopRunCards');
   const geotopRunCountInput = document.getElementById('geotopRunCountInput');

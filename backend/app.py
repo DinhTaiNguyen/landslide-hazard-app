@@ -5,6 +5,7 @@ import os
 import resource
 import shutil
 import threading
+import traceback
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -180,6 +181,8 @@ async def start_form_run(
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(exc)
             append_log(job_id, f"ERROR: {exc}")
+            for line in traceback.format_exc().strip().splitlines():
+                append_log(job_id, line)
         finally:
             JOBS[job_id]["updated_at"] = now_iso()
 
@@ -239,6 +242,8 @@ async def prepare_ml_dataset(
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(exc)
             append_log(job_id, f"ERROR: {exc}")
+            for line in traceback.format_exc().strip().splitlines():
+                append_log(job_id, line)
         finally:
             JOBS[job_id]["updated_at"] = now_iso()
 
@@ -328,6 +333,8 @@ async def run_ml(
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(exc)
             append_log(job_id, f"ERROR: {exc}")
+            for line in traceback.format_exc().strip().splitlines():
+                append_log(job_id, line)
         finally:
             JOBS[job_id]["updated_at"] = now_iso()
 
