@@ -79,9 +79,9 @@
         <div id="map"></div>
         <div class="map-overlay-controls" id="mapOverlayControls">
           <div class="map-toolbar-card" id="mapToolbarCard">
-            <div class="map-toolbar-dragbar" id="mapToolbarDragHandle" title="Drag toolbar">⋮⋮ Drag toolbar</div>
-            <div class="map-toolbar-grid">
-              <div class="toolbar-field">
+            <div class="map-toolbar-row">
+              <div class="map-toolbar-dragbar" id="mapToolbarDragHandle" title="Drag toolbar">⋮⋮</div>
+              <div class="toolbar-field compact">
                 <label for="basemapSelect">Base map</label>
                 <select id="basemapSelect">
                   <option value="osm">OpenStreetMap</option>
@@ -90,16 +90,17 @@
                   <option value="satellite">Satellite</option>
                 </select>
               </div>
-              <div class="toolbar-actions">
-                <button id="resetViewBtn" type="button" class="small-btn">Reset view</button>
-                <button id="fitLayerBtn" type="button" class="small-btn">Fit active layer</button>
-                <button id="clearLayerBtn" type="button" class="small-btn">Clear all layers</button>
+              <div class="toolbar-actions compact">
+                <button id="resetViewBtn" type="button" class="small-btn">Reset</button>
+                <button id="fitLayerBtn" type="button" class="small-btn">Fit layer</button>
+                <button id="clearLayerBtn" type="button" class="small-btn">Clear</button>
               </div>
             </div>
           </div>
         </div>
         <div id="mapEmptyNote" class="map-empty-note">Upload or generate a raster to display it here.</div>
         <div id="colorbarPanel" class="colorbar-panel" style="display:none;">
+          <div class="colorbar-dragbar" id="colorbarDragHandle" title="Drag legend">⋮⋮ Legend</div>
           <div class="colorbar-title">Raster legend</div>
           <div class="colorbar-wrap">
             <div class="colorbar-gradient"></div>

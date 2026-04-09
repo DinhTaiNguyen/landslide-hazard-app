@@ -417,37 +417,53 @@
   }
 
 
-  function setupMovableMapToolbar() {
-    if (!mapToolbarCard || !mapToolbarDragHandle || !mapOverlayControls || !mapWrap) return;
+  function makeDraggable(panelEl, handleEl, boundsEl, initialLeft, initialTop) {
+    if (!panelEl || !handleEl || !boundsEl) return;
     let dragging = false;
-    let startX = 0, startY = 0, startLeft = 12, startTop = 12;
+    let startX = 0, startY = 0, startLeft = initialLeft, startTop = initialTop;
     const clamp = () => {
-      const maxLeft = Math.max(12, mapWrap.clientWidth - mapToolbarCard.offsetWidth - 12);
-      const maxTop = Math.max(12, mapWrap.clientHeight - mapToolbarCard.offsetHeight - 12);
-      const left = Math.min(Math.max(12, parseFloat(mapOverlayControls.style.left || '12')), maxLeft);
-      const top = Math.min(Math.max(12, parseFloat(mapOverlayControls.style.top || '12')), maxTop);
-      mapOverlayControls.style.left = left + 'px';
-      mapOverlayControls.style.top = top + 'px';
+      const maxLeft = Math.max(12, boundsEl.clientWidth - panelEl.offsetWidth - 12);
+      const maxTop = Math.max(12, boundsEl.clientHeight - panelEl.offsetHeight - 12);
+      const left = Math.min(Math.max(12, parseFloat(panelEl.style.left || String(initialLeft))), maxLeft);
+      const top = Math.min(Math.max(12, parseFloat(panelEl.style.top || String(initialTop))), maxTop);
+      panelEl.style.left = left + 'px';
+      panelEl.style.top = top + 'px';
+      if (!panelEl.style.right) panelEl.style.right = 'auto';
+      if (!panelEl.style.bottom) panelEl.style.bottom = 'auto';
     };
-    mapToolbarDragHandle.addEventListener('pointerdown', (e) => {
+    panelEl.style.left = initialLeft + 'px';
+    panelEl.style.top = initialTop + 'px';
+    panelEl.style.right = 'auto';
+    panelEl.style.bottom = 'auto';
+    handleEl.addEventListener('pointerdown', (e) => {
       dragging = true;
       startX = e.clientX; startY = e.clientY;
-      startLeft = parseFloat(mapOverlayControls.style.left || '12');
-      startTop = parseFloat(mapOverlayControls.style.top || '12');
-      mapToolbarDragHandle.setPointerCapture(e.pointerId);
+      startLeft = parseFloat(panelEl.style.left || String(initialLeft));
+      startTop = parseFloat(panelEl.style.top || String(initialTop));
+      handleEl.setPointerCapture(e.pointerId);
       e.preventDefault();
     });
-    mapToolbarDragHandle.addEventListener('pointermove', (e) => {
+    handleEl.addEventListener('pointermove', (e) => {
       if (!dragging) return;
-      mapOverlayControls.style.left = (startLeft + (e.clientX - startX)) + 'px';
-      mapOverlayControls.style.top = (startTop + (e.clientY - startY)) + 'px';
+      panelEl.style.left = (startLeft + (e.clientX - startX)) + 'px';
+      panelEl.style.top = (startTop + (e.clientY - startY)) + 'px';
       clamp();
     });
     const stopDrag = () => { dragging = false; };
-    mapToolbarDragHandle.addEventListener('pointerup', stopDrag);
-    mapToolbarDragHandle.addEventListener('pointercancel', stopDrag);
+    handleEl.addEventListener('pointerup', stopDrag);
+    handleEl.addEventListener('pointercancel', stopDrag);
     window.addEventListener('resize', clamp);
     clamp();
+  }
+
+  function setupMovableMapToolbar() {
+    if (!mapToolbarCard || !mapToolbarDragHandle || !mapOverlayControls || !mapWrap) return;
+    makeDraggable(mapOverlayControls, mapToolbarDragHandle, mapWrap, 12, 12);
+  }
+
+  function setupMovableColorbar() {
+    if (!colorbarPanel || !colorbarDragHandle || !mapWrap) return;
+    makeDraggable(colorbarPanel, colorbarDragHandle, mapWrap, Math.max(12, mapWrap.clientWidth - 146), Math.max(12, mapWrap.clientHeight - 250));
   }
 
   function setupVerticalMapResize() {
@@ -1051,6 +1067,7 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
   backendUrlInput.value = state.backendUrl || defaultBackend;
   initMap();
   setupMovableMapToolbar();
+  setupMovableColorbar();
   setupVerticalMapResize();
   createSoilInputs();
   createGeotopCards();

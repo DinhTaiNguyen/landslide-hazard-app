@@ -89,7 +89,8 @@ body { overflow: hidden; }
 .toolbar-row { display: flex; align-items: center; gap: 8px; }
 .toolbar-row.buttons { flex-wrap: wrap; }
 .map-empty-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 500; text-align: center; padding: 18px 22px; background: rgba(10,18,28,.78); border: 1px solid rgba(255,255,255,.08); border-radius: 14px; color: var(--text); pointer-events: none; }
-.colorbar-panel { position: absolute; right: 18px; bottom: 18px; z-index: 700; width: 120px; padding: 12px; border-radius: 12px; background: rgba(15,22,34,.80); border: 1px solid rgba(255,255,255,.08); }
+.colorbar-panel { position: absolute; right: 18px; bottom: 18px; z-index: 700; width: 128px; padding: 10px 12px 12px; border-radius: 12px; background: rgba(15,22,34,.84); border: 1px solid rgba(255,255,255,.08); cursor: default; user-select: none; }
+.colorbar-dragbar { display: inline-flex; align-items: center; justify-content: center; min-width: 70px; height: 26px; margin-bottom: 8px; padding: 0 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: #a7bfd9; font-size: 11px; font-weight: 700; cursor: move; letter-spacing: .05em; }
 .colorbar-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
 .colorbar-wrap { display: flex; gap: 10px; }
 .colorbar-gradient { width: 22px; height: 180px; background: linear-gradient(to top, #0000ff 0%, #00ffff 25%, #ffff66 60%, #ff9900 80%, #ff0000 100%); }
@@ -109,3 +110,9 @@ body { overflow: hidden; }
 .preview-table th, .preview-table td { border: 1px solid rgba(255,255,255,0.08); padding: 6px 8px; text-align: left; white-space: nowrap; }
 .preview-table thead th { position: sticky; top: 0; background: #162131; z-index: 1; }
 .preview-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.03); }
+
+@media (max-width: 1200px) {
+  .map-toolbar-card { min-width: 280px; width: min(560px, calc(100vw - 140px)); }
+  .map-toolbar-row { grid-template-columns: auto 1fr; }
+  .toolbar-actions.compact { grid-column: 1 / -1; justify-content: flex-start; }
+}
