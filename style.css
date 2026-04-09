@@ -75,7 +75,8 @@ body { overflow: hidden; }
 .viz-tab, .right-workflow-tab { border: 1px solid var(--line); background: rgba(255,255,255,.03); color: #cbd9eb; padding: 10px 8px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
 .viz-tab.active, .right-workflow-tab.active { background: rgba(60,145,255,.14); color: #63aeff; }
 .viz-panel, .right-subpanel { display: none; min-height: 0; }
-.viz-panel.active, .right-subpanel.active { display: block; }
+.viz-panel.active { display: block; }
+.right-subpanel.active { display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
 .map-wrap { position: relative; flex: 0 0 auto; min-height: 260px; height: 50%; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,.06); resize: none; }
 #map { width: 100%; height: 100%; background: #07101a; }
 .map-overlay-controls { position: absolute; top: 12px; right: 12px; left: auto; z-index: 700; display: block; pointer-events: none; }
@@ -104,7 +105,7 @@ body { overflow: hidden; }
 .plot-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(255,255,255,.03); }
 .plot-card img { width: 100%; height: auto; display: block; border-radius: 8px; margin-bottom: 8px; }
 .plot-card a { color: #8ec7ff; text-decoration: none; font-size: 12px; }
-.right-panel { overflow-y: auto; }
+.right-panel { overflow: hidden; }
 @media (max-width: 1400px) { .app-shell { grid-template-columns: 320px 1fr 390px; } }
 @media (max-width: 1150px) { body { overflow: auto; } .app-shell { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto; height: auto; } }
 
