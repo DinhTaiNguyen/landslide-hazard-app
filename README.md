@@ -1,30 +1,20 @@
-# Landslide Hazard App
+# Landslide hazard app - Google Cloud chunk-upload version
 
-This package is prepared for **Google Cloud** deployment.
+This package is prepared for **Cloud Run + Cloud Storage**.
 
-## What is included
+## Main change
 
-1. **Backend**: FastAPI service for FORM + Machine Learning
-2. **Frontend**: static HTML/CSS/JS interface
-3. **Google Cloud deployment files**
-   - `cloudbuild.yaml`
-   - `backend/Dockerfile`
-   - `deploy-google-cloud-backend.sh`
-   - `deploy-google-cloud-backend.bat`
-   - `GOOGLE_CLOUD_STEP_BY_STEP.md`
+The frontend no longer sends all files to `/api/form/run` or `/api/ml/prepare` in one request.
+Instead, it uploads them in chunks using:
 
-## Recommended architecture
+- `/api/uploads/chunk`
+- `/api/uploads/finalize`
 
-- **Backend API** -> Google Cloud Run
-- **Frontend website** -> GitHub Pages or Google Cloud Storage static hosting
+Then it sends only a small upload manifest to start the job.
 
-This is the simplest setup because your UI is static, while the FORM/ML backend needs a Python server.
+## Required environment variables
 
-## Quick summary
+- `CORS_ALLOW_ORIGINS`
+- `GCS_UPLOAD_BUCKET`
 
-1. Deploy `backend/` to **Cloud Run**
-2. Copy the Cloud Run service URL
-3. Paste that URL into `config.js` and `frontend/config.js`
-4. Upload the frontend to GitHub Pages or Cloud Storage
-
-Full instructions are in `GOOGLE_CLOUD_STEP_BY_STEP.md`.
+See `GOOGLE_CLOUD_STEP_BY_STEP.md` for deployment steps.

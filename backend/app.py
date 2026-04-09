@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
+from google.cloud import storage
 
 from form_runner import FormSettings, InputPaths, SoilParam, run_form
 from ml_data_prep import RAINFALL_DEFAULTS, prepare_stage1_dataset
@@ -22,12 +23,35 @@ from ml_runner import MLConfig, run_ml_pipeline
 BASE_DIR = Path(__file__).resolve().parent
 RUNS_DIR = BASE_DIR / "runs"
 RUNS_DIR.mkdir(exist_ok=True)
+CHUNK_TMP_DIR = RUNS_DIR / "chunk_uploads"
+CHUNK_TMP_DIR.mkdir(exist_ok=True)
+GCS_UPLOAD_BUCKET = os.getenv("GCS_UPLOAD_BUCKET", "").strip()
+_STORAGE_CLIENT = None
+
 
 def get_cors_origins() -> list[str]:
     raw = os.getenv("CORS_ALLOW_ORIGINS", "*").strip()
     if not raw or raw == "*":
         return ["*"]
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def get_storage_client() -> storage.Client:
+    global _STORAGE_CLIENT
+    if _STORAGE_CLIENT is None:
+        _STORAGE_CLIENT = storage.Client()
+    return _STORAGE_CLIENT
+
+
+def now_iso() -> str:
+    return datetime.utcnow().isoformat() + "Z"
+
+
+def get_memory_usage_mb() -> float:
+    usage_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if usage_kb > 10_000_000:
+        return round(usage_kb / (1024 * 1024), 2)
+    return round(usage_kb / 1024, 2)
 
 
 app = FastAPI(title="Landslide Hazard Backend")
@@ -41,18 +65,6 @@ app.add_middleware(
 )
 
 JOBS: Dict[str, dict] = {}
-
-
-def now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
-
-
-def get_memory_usage_mb() -> float:
-    usage_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    if usage_kb > 10_000_000:
-        return round(usage_kb / (1024 * 1024), 2)
-    return round(usage_kb / 1024, 2)
-
 
 
 def save_upload(upload: UploadFile, destination: Path) -> Path:
@@ -94,20 +106,163 @@ def append_log(job_id: str, message: str) -> None:
     JOBS[job_id]["updated_at"] = now_iso()
 
 
+def local_chunk_part_path(upload_id: str, relative_path: str, chunk_index: int) -> Path:
+    rel = sanitize_relpath(relative_path)
+    return CHUNK_TMP_DIR / upload_id / "parts" / rel.parent / f"{rel.name}.part{chunk_index:05d}"
+
+
+def local_final_path(upload_id: str, category: str, relative_path: str) -> Path:
+    rel = sanitize_relpath(relative_path)
+    return CHUNK_TMP_DIR / upload_id / "final" / category / rel
+
+
+def gcs_chunk_blob_name(upload_id: str, relative_path: str, chunk_index: int) -> str:
+    rel = sanitize_relpath(relative_path).as_posix()
+    return f"chunk_uploads/{upload_id}/parts/{rel}.part{chunk_index:05d}"
+
+
+def gcs_final_blob_name(upload_id: str, category: str, relative_path: str) -> str:
+    rel = sanitize_relpath(relative_path).as_posix()
+    return f"chunk_uploads/{upload_id}/final/{category}/{rel}"
+
+
+def compose_many(bucket: storage.Bucket, destination_name: str, source_names: List[str]) -> None:
+    if not source_names:
+        raise ValueError("No source parts supplied for composition")
+    current = list(source_names)
+    temp_blobs: list[str] = []
+    round_idx = 0
+    while len(current) > 32:
+        next_round: list[str] = []
+        for group_idx in range(0, len(current), 32):
+            subset = current[group_idx:group_idx + 32]
+            tmp_name = f"{destination_name}.compose_tmp_r{round_idx}_{group_idx//32}_{uuid.uuid4().hex[:8]}"
+            bucket.blob(tmp_name).compose([bucket.blob(name) for name in subset])
+            temp_blobs.append(tmp_name)
+            next_round.append(tmp_name)
+        current = next_round
+        round_idx += 1
+    bucket.blob(destination_name).compose([bucket.blob(name) for name in current])
+    for name in temp_blobs:
+        try:
+            bucket.blob(name).delete()
+        except Exception:
+            pass
+
+
+def store_chunk(upload_id: str, relative_path: str, chunk_index: int, data: bytes) -> None:
+    if GCS_UPLOAD_BUCKET:
+        bucket = get_storage_client().bucket(GCS_UPLOAD_BUCKET)
+        bucket.blob(gcs_chunk_blob_name(upload_id, relative_path, chunk_index)).upload_from_string(data)
+    else:
+        path = local_chunk_part_path(upload_id, relative_path, chunk_index)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+
+def finalize_chunked_upload(upload_id: str, category: str, manifest: list[dict]) -> dict:
+    files_out = []
+    if GCS_UPLOAD_BUCKET:
+        bucket = get_storage_client().bucket(GCS_UPLOAD_BUCKET)
+        for item in manifest:
+            rel = sanitize_relpath(item["relative_path"]).as_posix()
+            total_chunks = int(item["total_chunks"])
+            parts = [gcs_chunk_blob_name(upload_id, rel, idx) for idx in range(total_chunks)]
+            destination_name = gcs_final_blob_name(upload_id, category, rel)
+            compose_many(bucket, destination_name, parts)
+            for part in parts:
+                try:
+                    bucket.blob(part).delete()
+                except Exception:
+                    pass
+            files_out.append({
+                "relative_path": rel,
+                "uri": f"gs://{GCS_UPLOAD_BUCKET}/{destination_name}",
+                "size": bucket.blob(destination_name).reload() or None,
+            })
+        return {"storage": "gcs", "bucket": GCS_UPLOAD_BUCKET, "upload_id": upload_id, "category": category, "files": files_out}
+    for item in manifest:
+        rel = sanitize_relpath(item["relative_path"]).as_posix()
+        total_chunks = int(item["total_chunks"])
+        destination = local_final_path(upload_id, category, rel)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("wb") as out:
+            for idx in range(total_chunks):
+                part_path = local_chunk_part_path(upload_id, rel, idx)
+                if not part_path.exists():
+                    raise FileNotFoundError(f"Missing uploaded chunk: {part_path.name}")
+                out.write(part_path.read_bytes())
+                part_path.unlink(missing_ok=True)
+        files_out.append({"relative_path": rel, "uri": str(destination)})
+    return {"storage": "local", "upload_id": upload_id, "category": category, "files": files_out}
+
+
+def download_uri_to_path(uri: str, destination: Path) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if uri.startswith("gs://"):
+        _, rest = uri.split("gs://", 1)
+        bucket_name, blob_name = rest.split("/", 1)
+        get_storage_client().bucket(bucket_name).blob(blob_name).download_to_filename(str(destination))
+        return destination
+    src = Path(uri)
+    if not src.exists():
+        raise FileNotFoundError(f"Uploaded asset not found: {uri}")
+    shutil.copy2(src, destination)
+    return destination
+
+
+def parse_upload_manifest(raw: str | None) -> dict | None:
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid upload_manifest_json: {exc}")
+
+
+def find_manifest_uri(manifest: dict, prefix: str) -> str | None:
+    prefix = prefix.strip("/") + "/"
+    for item in manifest.get("files", []):
+        rel = item.get("relative_path", "")
+        if rel == prefix[:-1] or rel.startswith(prefix):
+            return item.get("uri")
+    return None
+
+
+def find_manifest_files(manifest: dict, prefix: str) -> list[dict]:
+    prefix = prefix.strip("/") + "/"
+    return [item for item in manifest.get("files", []) if str(item.get("relative_path", "")).startswith(prefix)]
+
+
 @app.get("/")
 def root() -> dict:
     return {
         "service": "Landslide Hazard Backend",
         "status": "ok",
         "health": "/api/health",
-        "endpoints": ["/api/form/run", "/api/ml/prepare", "/api/ml/run"],
+        "endpoints": [
+            "/api/health",
+            "/api/uploads/chunk",
+            "/api/uploads/finalize",
+            "/api/form/run",
+            "/api/ml/prepare",
+            "/api/ml/run",
+        ],
         "cors_allow_origins": CORS_ORIGINS,
+        "chunk_upload_backend": "gcs" if GCS_UPLOAD_BUCKET else "local",
+        "gcs_upload_bucket": GCS_UPLOAD_BUCKET or None,
     }
 
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "time": now_iso(), "rainfall_defaults": len(RAINFALL_DEFAULTS)}
+    return {
+        "status": "ok",
+        "time": now_iso(),
+        "rainfall_defaults": len(RAINFALL_DEFAULTS),
+        "chunk_upload_backend": "gcs" if GCS_UPLOAD_BUCKET else "local",
+        "gcs_upload_bucket": GCS_UPLOAD_BUCKET or None,
+    }
 
 
 @app.get("/api/rainfall-defaults")
@@ -115,14 +270,49 @@ def rainfall_defaults() -> dict:
     return {"defaults": RAINFALL_DEFAULTS}
 
 
+@app.post("/api/uploads/chunk")
+async def upload_chunk(
+    upload_id: str = Form(...),
+    relative_path: str = Form(...),
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    chunk_file: UploadFile = File(...),
+):
+    if chunk_index < 0 or total_chunks < 1 or chunk_index >= total_chunks:
+        raise HTTPException(status_code=400, detail="Invalid chunk index or total_chunks")
+    try:
+        rel = sanitize_relpath(relative_path).as_posix()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    data = await chunk_file.read()
+    store_chunk(upload_id, rel, chunk_index, data)
+    return {"status": "ok", "upload_id": upload_id, "relative_path": rel, "chunk_index": chunk_index, "total_chunks": total_chunks}
+
+
+@app.post("/api/uploads/finalize")
+async def finalize_upload(upload_id: str = Form(...), category: str = Form(...), manifest_json: str = Form(...)):
+    try:
+        manifest = json.loads(manifest_json)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid manifest_json: {exc}")
+    if not isinstance(manifest, list) or not manifest:
+        raise HTTPException(status_code=400, detail="manifest_json must be a non-empty JSON array")
+    try:
+        finalized = finalize_chunked_upload(upload_id, category, manifest)
+        return finalized
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Finalize failed: {exc}")
+
+
 @app.post("/api/form/run")
 async def start_form_run(
     settings_json: str = Form(...),
-    slope_file: UploadFile = File(...),
-    soiltype_file: UploadFile = File(...),
-    soilthickness_file: UploadFile = File(...),
+    upload_manifest_json: str | None = Form(None),
+    slope_file: UploadFile | None = File(None),
+    soiltype_file: UploadFile | None = File(None),
+    soilthickness_file: UploadFile | None = File(None),
     dem_file: UploadFile | None = File(None),
-    pwp_files: List[UploadFile] = File(...),
+    pwp_files: Optional[List[UploadFile]] = File(None),
 ):
     run_dir = RUNS_DIR / f"run_{uuid.uuid4().hex[:12]}"
     input_dir = run_dir / "inputs"
@@ -136,6 +326,8 @@ async def start_form_run(
         payload = json.loads(settings_json)
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid settings_json: {exc}")
+
+    upload_manifest = parse_upload_manifest(upload_manifest_json)
 
     soil_params = {
         int(item["soil_id"]): SoilParam(
@@ -160,20 +352,42 @@ async def start_form_run(
         soil_params=soil_params,
     )
 
-    inputs = InputPaths(
-        slope_asc=save_upload(slope_file, input_dir / "slope.asc"),
-        soiltype_asc=save_upload(soiltype_file, input_dir / "soiltype.asc"),
-        soilthickness_asc=save_upload(soilthickness_file, input_dir / "soilthickness.asc"),
-        dem_asc=save_upload(dem_file, input_dir / "dem.asc") if dem_file else None,
-        pwp_folder=pwp_dir,
-    )
-
-    for upload in pwp_files:
-        rel = sanitize_relpath(upload.filename)
-        save_upload(upload, pwp_dir / rel.name)
+    if upload_manifest:
+        slope_uri = find_manifest_uri(upload_manifest, "maps/slope.asc")
+        soiltype_uri = find_manifest_uri(upload_manifest, "maps/soiltype.asc")
+        soilthickness_uri = find_manifest_uri(upload_manifest, "maps/soilthickness.asc")
+        dem_uri = find_manifest_uri(upload_manifest, "maps/dem.asc")
+        pwp_entries = find_manifest_files(upload_manifest, "pwp")
+        if not (slope_uri and soiltype_uri and soilthickness_uri and pwp_entries):
+            raise HTTPException(status_code=400, detail="Chunked upload manifest is missing required form files")
+        inputs = InputPaths(
+            slope_asc=download_uri_to_path(slope_uri, input_dir / "slope.asc"),
+            soiltype_asc=download_uri_to_path(soiltype_uri, input_dir / "soiltype.asc"),
+            soilthickness_asc=download_uri_to_path(soilthickness_uri, input_dir / "soilthickness.asc"),
+            dem_asc=download_uri_to_path(dem_uri, input_dir / "dem.asc") if dem_uri else None,
+            pwp_folder=pwp_dir,
+        )
+        for item in pwp_entries:
+            rel = sanitize_relpath(item["relative_path"])
+            download_uri_to_path(item["uri"], pwp_dir / rel.name)
+        uploaded_pwp_count = len(pwp_entries)
+    else:
+        if not (slope_file and soiltype_file and soilthickness_file and pwp_files):
+            raise HTTPException(status_code=400, detail="Either chunked upload manifest or direct file uploads are required")
+        inputs = InputPaths(
+            slope_asc=save_upload(slope_file, input_dir / "slope.asc"),
+            soiltype_asc=save_upload(soiltype_file, input_dir / "soiltype.asc"),
+            soilthickness_asc=save_upload(soilthickness_file, input_dir / "soilthickness.asc"),
+            dem_asc=save_upload(dem_file, input_dir / "dem.asc") if dem_file else None,
+            pwp_folder=pwp_dir,
+        )
+        for upload in (pwp_files or []):
+            rel = sanitize_relpath(upload.filename)
+            save_upload(upload, pwp_dir / rel.name)
+        uploaded_pwp_count = len(pwp_files or [])
 
     job_id = create_job("form", run_dir, extra={"output_dir_name": "outputs"})
-    append_log(job_id, f"Uploaded {len(pwp_files)} PWP files")
+    append_log(job_id, f"Prepared {uploaded_pwp_count} PWP files")
 
     def worker() -> None:
         try:
@@ -186,7 +400,7 @@ async def start_form_run(
             JOBS[job_id]["summary"] = summary
             JOBS[job_id]["status"] = "completed"
             append_log(job_id, f"FORM job completed successfully | memory used: {summary['memory_used_mb']} MB")
-        except MemoryError as exc:
+        except MemoryError:
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = "MemoryError"
             append_log(job_id, "ERROR: FORM stopped because the backend ran out of memory.")
@@ -210,8 +424,9 @@ async def start_form_run(
 @app.post("/api/ml/prepare")
 async def prepare_ml_dataset(
     rainfall_json: str = Form(...),
-    map_files: List[UploadFile] = File(...),
-    form_output_files: List[UploadFile] = File(...),
+    upload_manifest_json: str | None = Form(None),
+    map_files: Optional[List[UploadFile]] = File(None),
+    form_output_files: Optional[List[UploadFile]] = File(None),
 ):
     run_dir = RUNS_DIR / f"run_{uuid.uuid4().hex[:12]}"
     input_dir = run_dir / "inputs"
@@ -227,15 +442,34 @@ async def prepare_ml_dataset(
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid rainfall_json: {exc}")
 
-    for upload in map_files:
-        rel = sanitize_relpath(upload.filename)
-        save_upload(upload, maps_dir / rel.name)
-    for upload in form_output_files:
-        rel = sanitize_relpath(upload.filename)
-        save_upload(upload, form_dir / rel)
+    upload_manifest = parse_upload_manifest(upload_manifest_json)
+    if upload_manifest:
+        map_entries = find_manifest_files(upload_manifest, "maps")
+        form_entries = find_manifest_files(upload_manifest, "form_outputs")
+        if not map_entries or not form_entries:
+            raise HTTPException(status_code=400, detail="Chunked upload manifest is missing maps or FORM outputs")
+        for item in map_entries:
+            rel = sanitize_relpath(item["relative_path"])
+            download_uri_to_path(item["uri"], maps_dir / Path(*rel.parts[1:]))
+        for item in form_entries:
+            rel = sanitize_relpath(item["relative_path"])
+            download_uri_to_path(item["uri"], form_dir / Path(*rel.parts[1:]))
+        map_count = len(map_entries)
+        form_count = len(form_entries)
+    else:
+        if not map_files or not form_output_files:
+            raise HTTPException(status_code=400, detail="Either chunked upload manifest or direct files are required")
+        for upload in map_files:
+            rel = sanitize_relpath(upload.filename)
+            save_upload(upload, maps_dir / rel.name)
+        for upload in form_output_files:
+            rel = sanitize_relpath(upload.filename)
+            save_upload(upload, form_dir / rel)
+        map_count = len(map_files)
+        form_count = len(form_output_files)
 
     job_id = create_job("ml_prepare", run_dir, extra={"output_dir_name": "outputs"})
-    append_log(job_id, f"Uploaded {len(map_files)} map files and {len(form_output_files)} FORM files")
+    append_log(job_id, f"Prepared {map_count} map files and {form_count} FORM files")
 
     def worker() -> None:
         try:
@@ -259,6 +493,7 @@ async def prepare_ml_dataset(
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(exc)
             append_log(job_id, f"ERROR: {exc}")
+            append_log(job_id, f"Current memory: {get_memory_usage_mb()} MB")
             for line in traceback.format_exc().strip().splitlines():
                 append_log(job_id, line)
         finally:
@@ -350,6 +585,7 @@ async def run_ml(
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(exc)
             append_log(job_id, f"ERROR: {exc}")
+            append_log(job_id, f"Current memory: {get_memory_usage_mb()} MB")
             for line in traceback.format_exc().strip().splitlines():
                 append_log(job_id, line)
         finally:
@@ -360,7 +596,7 @@ async def run_ml(
 
 
 @app.get("/api/jobs/{job_id}")
-def get_job(job_id: str) -> dict:
+def job_status(job_id: str):
     job = JOBS.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -373,22 +609,16 @@ def download_output(job_id: str, filename: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     run_dir = Path(job["run_dir"])
-    matches = list(run_dir.rglob(filename))
-    if not matches:
+    output_dir = run_dir / job.get("output_dir_name", "outputs")
+    file_path = output_dir / filename
+    if not file_path.exists():
         raise HTTPException(status_code=404, detail="Output file not found")
-    file_path = matches[0]
-    media = "text/plain" if file_path.suffix.lower() in {".asc", ".csv", ".txt", ".json"} else None
-    return FileResponse(file_path, filename=file_path.name, media_type=media)
+    return FileResponse(file_path)
 
 
-@app.get("/api/jobs/{job_id}/outputs/{filename}/text")
-def get_output_text(job_id: str, filename: str):
+@app.get("/api/jobs/{job_id}/logs.txt")
+def download_logs(job_id: str):
     job = JOBS.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    run_dir = Path(job["run_dir"])
-    matches = list(run_dir.rglob(filename))
-    if not matches:
-        raise HTTPException(status_code=404, detail="Output file not found")
-    file_path = matches[0]
-    return PlainTextResponse(file_path.read_text(encoding="utf-8"))
+    return PlainTextResponse("\n".join(job["logs"]))

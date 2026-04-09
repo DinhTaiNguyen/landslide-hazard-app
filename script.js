@@ -72,6 +72,8 @@
     { soil_id: 3, name: 'Hi', phi_deg: 37.61, phi_cov: 0.08, c_kpa: 4.82, c_cov: 0.29, gamma_s: 15.50, rho_c_phi: -0.5 }
   ];
 
+  const CHUNK_BYTES = 8 * 1024 * 1024;
+
   const defaultHyperparameters = [
     ['batch_size_stage1', 8192], ['batch_size_stage2', 4096], ['epochs_stage1', 80], ['epochs_stage2', 100],
     ['lr_stage1', 1e-3], ['lr_stage2', 1e-3], ['weight_decay', 1e-5], ['patience_stage1', 10], ['patience_stage2', 15],
@@ -207,6 +209,51 @@
       addConsoleLine(consoleContent, 'err', `Backend check failed: ${err.message}`);
       return false;
     }
+  }
+
+
+  async function uploadChunkedAssets(fileEntries, category, statusTarget) {
+    const uploadId = `up_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
+    const manifest = [];
+    let uploadedBytes = 0;
+    const totalBytes = fileEntries.reduce((sum, entry) => sum + (entry.file?.size || 0), 0);
+    const setUploadMessage = (message) => {
+      if (statusTarget) statusTarget.textContent = message;
+      addConsoleLine(consoleContent, 'info', message);
+    };
+    for (const entry of fileEntries) {
+      const file = entry.file;
+      const relativePath = String(entry.relativePath || file.name).replace(/^\/+/, '');
+      const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_BYTES));
+      manifest.push({ relative_path: relativePath, total_chunks: totalChunks });
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * CHUNK_BYTES;
+        const end = Math.min(file.size, start + CHUNK_BYTES);
+        const blob = file.slice(start, end);
+        const fd = new FormData();
+        fd.append('upload_id', uploadId);
+        fd.append('relative_path', relativePath);
+        fd.append('chunk_index', String(chunkIndex));
+        fd.append('total_chunks', String(totalChunks));
+        fd.append('chunk_file', blob, `${file.name}.part${chunkIndex}`);
+        const res = await fetch(`${apiBase()}/api/uploads/chunk`, { method: 'POST', body: fd });
+        if (!res.ok) throw new Error(await res.text());
+        uploadedBytes += blob.size;
+        const pct = totalBytes ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)) : 100;
+        if (statusTarget) {
+          statusTarget.textContent = `Uploading ${category}: ${pct}% (${Math.round(uploadedBytes / 1024 / 1024)} / ${Math.max(1, Math.round(totalBytes / 1024 / 1024))} MB)`;
+        }
+      }
+    }
+    const finalize = new FormData();
+    finalize.append('upload_id', uploadId);
+    finalize.append('category', category);
+    finalize.append('manifest_json', JSON.stringify(manifest));
+    const finalRes = await fetch(`${apiBase()}/api/uploads/finalize`, { method: 'POST', body: finalize });
+    if (!finalRes.ok) throw new Error(await finalRes.text());
+    const out = await finalRes.json();
+    setUploadMessage(`Chunk upload completed for ${category} (${manifest.length} files).`);
+    return out;
   }
 
   function activateVizPanel(id) {
@@ -620,15 +667,19 @@
       single_time_code: singleTimeCodeInput.value,
       soil_params: collectSoilParams()
     };
-    const formData = new FormData();
-    formData.append('settings_json', JSON.stringify(payload));
-    formData.append('slope_file', state.formInputs.slope, state.formInputs.slope.name);
-    formData.append('soiltype_file', state.formInputs.soilType, state.formInputs.soilType.name);
-    formData.append('soilthickness_file', state.formInputs.soilThickness, state.formInputs.soilThickness.name);
-    if (state.formInputs.dem) formData.append('dem_file', state.formInputs.dem, state.formInputs.dem.name);
-    card.pwpFiles.forEach(file => formData.append('pwp_files', file, file.webkitRelativePath || file.name));
+    const uploadEntries = [
+      { file: state.formInputs.slope, relativePath: 'maps/slope.asc' },
+      { file: state.formInputs.soilType, relativePath: 'maps/soiltype.asc' },
+      { file: state.formInputs.soilThickness, relativePath: 'maps/soilthickness.asc' },
+      ...(state.formInputs.dem ? [{ file: state.formInputs.dem, relativePath: 'maps/dem.asc' }] : []),
+      ...card.pwpFiles.map(file => ({ file, relativePath: `pwp/${file.webkitRelativePath || file.name}` }))
+    ];
     try {
-      const res = await fetch(`${apiBase()}/api/form/run`, { method: 'POST', body: formData });
+      const manifest = await uploadChunkedAssets(uploadEntries, 'form', card.folderSummary);
+      const fd = new FormData();
+      fd.append('settings_json', JSON.stringify(payload));
+      fd.append('upload_manifest_json', JSON.stringify(manifest));
+      const res = await fetch(`${apiBase()}/api/form/run`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       card.jobId = data.job_id;
@@ -884,11 +935,15 @@
     }
     activateRightPanel('mlPanel'); activateVizPanel('mlRunningPanel');
     dataPrepStatus.textContent = 'Preparing and uploading data...';
-    const fd = new FormData();
-    fd.append('rainfall_json', JSON.stringify(state.ml.rainfall));
-    state.ml.mapFiles.forEach(file => fd.append('map_files', file, file.webkitRelativePath || file.name));
-    state.ml.formOutputFiles.forEach(file => fd.append('form_output_files', file, file.webkitRelativePath || file.name));
+    const uploadEntries = [
+      ...state.ml.mapFiles.map(file => ({ file, relativePath: `maps/${file.name}` })),
+      ...state.ml.formOutputFiles.map(file => ({ file, relativePath: `form_outputs/${file.webkitRelativePath || file.name}` }))
+    ];
     try {
+      const manifest = await uploadChunkedAssets(uploadEntries, 'ml_prepare', dataPrepStatus);
+      const fd = new FormData();
+      fd.append('rainfall_json', JSON.stringify(state.ml.rainfall));
+      fd.append('upload_manifest_json', JSON.stringify(manifest));
       const res = await fetch(`${apiBase()}/api/ml/prepare`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
