@@ -75,8 +75,8 @@ body { overflow: hidden; }
 .viz-panel.active, .right-subpanel.active { display: block; }
 .map-wrap { position: relative; flex: 0 0 auto; min-height: 260px; height: 50%; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,.06); resize: none; }
 #map { width: 100%; height: 100%; background: #07101a; }
-.map-overlay-controls { position: absolute; top: 12px; left: 12px; z-index: 700; display: block; pointer-events: none; }
-.map-toolbar-card { width: min(620px, calc(100vw - 470px)); min-width: 300px; max-width: 650px; padding: 6px 8px; border-radius: 12px; background: rgba(15,22,34,.9); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(6px); box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: auto; cursor: default; user-select: none; }
+.map-overlay-controls { position: absolute; top: 12px; right: 12px; left: auto; z-index: 700; display: block; pointer-events: none; }
+.map-toolbar-card { width: auto; min-width: 0; max-width: 650px; padding: 6px 8px; border-radius: 12px; background: rgba(15,22,34,.9); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(6px); box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: auto; cursor: default; user-select: none; }
 
 .map-toolbar-dragbar { display: inline-flex; align-items: center; justify-content: center; width: 28px; min-width: 28px; height: 32px; font-size: 0; font-weight: 700; color: #9fb7d4; margin: 0; cursor: move; letter-spacing: .03em; border-radius: 8px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
 .map-toolbar-dragbar::before { content: ""; width: 12px; height: 12px; border-radius: 2px; background-image: radial-gradient(rgba(255,255,255,.35) 1.2px, transparent 1.2px); background-size: 6px 6px; background-position: 0 0; }
@@ -118,12 +118,12 @@ body { overflow: hidden; }
 }
 
 .toolbar-field.compact label { display:block; font-size:10px; color:var(--muted); margin-bottom:2px; line-height:1; }
-.toolbar-field.compact select { height:30px; padding:2px 8px; border-radius:8px; font-size:12px; }
+.toolbar-field.compact select { height:30px; width: 140px; max-width: 140px; padding:2px 8px; border-radius:8px; font-size:12px; }
 
 .layer-control-list .download-group { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .layer-control-list .download-group a { color:#7fc2ff; text-decoration:none; }
 .layer-control-list .download-group a:hover { text-decoration:underline; }
 
 .map-toolbar-card .small-btn { padding: 7px 10px; min-height: 30px; font-size: 11px; }
-.map-toolbar-card .toolbar-field.compact { min-width: 0; }
+.map-toolbar-card .toolbar-field.compact { min-width: 0; flex: 0 0 auto; }
 .map-toolbar-card .toolbar-actions.compact { justify-self: end; }

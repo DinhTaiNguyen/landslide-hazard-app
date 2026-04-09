@@ -459,7 +459,8 @@
 
   function setupMovableMapToolbar() {
     if (!mapToolbarCard || !mapToolbarDragHandle || !mapOverlayControls || !mapWrap) return;
-    makeDraggable(mapOverlayControls, mapToolbarDragHandle, mapWrap, 12, 12);
+    const defaultLeft = Math.max(12, mapWrap.clientWidth - ((mapToolbarCard?.offsetWidth || 420) + 12));
+    makeDraggable(mapOverlayControls, mapToolbarDragHandle, mapWrap, defaultLeft, 12);
   }
 
   function setupMovableColorbar() {
