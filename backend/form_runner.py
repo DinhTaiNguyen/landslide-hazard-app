@@ -389,6 +389,7 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
         | (~np.isin(soiltype, valid_soil_ids))
     )
 
+    # Define grid dimensions before any progress logging to avoid UnboundLocalError
     rows, cols = slope.shape
     params = build_parameter_rasters(soiltype, settings.soil_params)
     effective_depth_stack = build_effective_depth_stack(soilthickness).astype(np.float32)
