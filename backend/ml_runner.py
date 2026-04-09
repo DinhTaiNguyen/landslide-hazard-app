@@ -229,29 +229,25 @@ def infer_csv_dtypes(csv_path: Path) -> dict:
     return dtypes
 
 
-def sample_rows_for_events(csv_path: Path, event_ids: List[str], dtypes: dict, max_rows: int, seed: int, log: LogFn, label: str, chunksize: int = 10000) -> pd.DataFrame:
+def load_rows_for_events(csv_path: Path, event_ids: List[str], dtypes: dict, log: LogFn, label: str, chunksize: int = 10000) -> pd.DataFrame:
     if not event_ids:
         return pd.DataFrame()
-    rng = np.random.default_rng(seed)
     wanted = set(str(e) for e in event_ids)
-    reservoir = None
+    collected = []
     seen = 0
     for chunk in pd.read_csv(csv_path, dtype=dtypes, chunksize=chunksize):
         chunk["event_id"] = chunk["event_id"].astype(str)
         filt = chunk[chunk["event_id"].isin(wanted)]
         if filt.empty:
             continue
-        reservoir = filt.copy() if reservoir is None else pd.concat([reservoir, filt], ignore_index=True)
+        collected.append(filt.copy())
         seen += len(filt)
-        if len(reservoir) > max_rows:
-            take_idx = rng.choice(len(reservoir), size=max_rows, replace=False)
-            reservoir = reservoir.iloc[take_idx].reset_index(drop=True)
-    if reservoir is None:
-        reservoir = pd.DataFrame()
-    else:
-        reservoir = reservoir.reset_index(drop=True)
-    log(f"{label}: kept {len(reservoir):,} sampled rows from {seen:,} available rows")
-    return reservoir
+    if not collected:
+        log(f"{label}: no rows found for events {sorted(wanted)}")
+        return pd.DataFrame()
+    df = pd.concat(collected, ignore_index=True).reset_index(drop=True)
+    log(f"{label}: loaded all {len(df):,} rows from {seen:,} available rows")
+    return df
 
 
 def chunk_reader_for_events(csv_path: Path, event_ids: List[str], dtypes: dict, chunksize: int = 10000):
@@ -473,7 +469,7 @@ def run_stage2(dataset_csv: Path, dtypes: dict, stage1_preprocessor, stage1_mode
     label_arr, label_meta = read_asc(label_asc)
     label_flat = label_arr.ravel()
     label_nodata = label_meta['nodata_value']
-    s2_df = sample_rows_for_events(dataset_csv, [str(config.stage2_event)], dtypes, max_rows=12000, seed=config.random_seed + 3, log=log, label=f"Stage 2 event {config.stage2_event}")
+    s2_df = load_rows_for_events(dataset_csv, [str(config.stage2_event)], dtypes, log=log, label=f"Stage 2 event {config.stage2_event}")
     if s2_df.empty:
         raise ValueError(f"Stage 2 event {config.stage2_event} not found in dataset.")
     s2_df['label'] = label_flat[s2_df['grid_id'].astype(np.int64).values]
@@ -565,10 +561,10 @@ def run_ml_pipeline(dataset_csv: Path, reference_asc: Path, config: MLConfig, ou
     if not train_events or not val_events or not test_events:
         raise ValueError('Training, validation, and testing event selections must all contain at least one valid event.')
 
-    log(f'Loading machine learning dataset from {dataset_csv.name} using sampled original-style PyTorch training')
-    train_df = sample_rows_for_events(dataset_csv, train_events, dtypes, max_rows=10000, seed=config.random_seed, log=log, label='Stage 1 training')
-    val_df = sample_rows_for_events(dataset_csv, val_events, dtypes, max_rows=5000, seed=config.random_seed + 1, log=log, label='Stage 1 validation')
-    test_df = sample_rows_for_events(dataset_csv, test_events, dtypes, max_rows=5000, seed=config.random_seed + 2, log=log, label='Stage 1 testing')
+    log(f'Loading machine learning dataset from {dataset_csv.name} using full-event original-style PyTorch training')
+    train_df = load_rows_for_events(dataset_csv, train_events, dtypes, log=log, label='Stage 1 training')
+    val_df = load_rows_for_events(dataset_csv, val_events, dtypes, log=log, label='Stage 1 validation')
+    test_df = load_rows_for_events(dataset_csv, test_events, dtypes, log=log, label='Stage 1 testing')
     if train_df.empty or val_df.empty or test_df.empty:
         raise ValueError('One of the Stage 1 splits is empty after loading the dataset.')
 
@@ -660,12 +656,12 @@ def run_ml_pipeline(dataset_csv: Path, reference_asc: Path, config: MLConfig, ou
     with metrics_txt.open('w', encoding='utf-8') as f:
         f.write('Machine learning summary\n')
         f.write('=' * 60 + '\n')
-        f.write('Runtime mode: sampled_original_pytorch\n')
+        f.write('Runtime mode: full_original_pytorch\n')
         f.write(f'Train events: {train_events}\n')
         f.write(f'Val events: {val_events}\n')
         f.write(f'Test events: {test_events}\n')
-        f.write(f'Stage 1 MAE (sampled test rows): {stage1_mae:.6f}\n')
-        f.write(f'Stage 1 BCE loss (sampled test rows): {stage1_bce:.6f}\n')
+        f.write(f'Stage 1 MAE (full test rows): {stage1_mae:.6f}\n')
+        f.write(f'Stage 1 BCE loss (full test rows): {stage1_bce:.6f}\n')
         for line in metrics_lines:
             f.write(line + '\n')
         if stage2_summary:
@@ -675,7 +671,7 @@ def run_ml_pipeline(dataset_csv: Path, reference_asc: Path, config: MLConfig, ou
     output_files[metrics_txt.name] = metrics_txt
 
     summary = {
-        'runtime_mode': 'sampled_original_pytorch',
+        'runtime_mode': 'full_original_pytorch',
         'stage1_train_events': train_events,
         'stage1_val_events': val_events,
         'stage1_test_events': test_events,
@@ -683,7 +679,7 @@ def run_ml_pipeline(dataset_csv: Path, reference_asc: Path, config: MLConfig, ou
         'stage1_softlabel_mae': stage1_mae,
         'stage1_bce_loss': stage1_bce,
         'stage2_enabled': bool(stage2_enabled_and_ready),
-        'memory_strategy': 'chunked_sampling_plus_original_loss_and_networks',
+        'memory_strategy': 'full_event_load_with_chunked_csv_scan',
         **stage2_summary,
     }
     return MLResult(summary=summary, output_files=output_files, plot_files=plot_files)

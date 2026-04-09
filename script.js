@@ -1,5 +1,6 @@
 (function () {
-  const defaultBackend = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || window.location.origin;
+  const CONFIGURED_API_BASE = 'https://landslide-hazard-api-11015728223.australia-southeast1.run.app';
+  const defaultBackend = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || CONFIGURED_API_BASE;
   const backendUrlInput = document.getElementById('backendUrlInput');
   const backendStatus = document.getElementById('backendStatus');
   const currentTimeDisplay = document.getElementById('currentTimeDisplay');
@@ -127,7 +128,7 @@
   }
 
   const state = {
-    backendUrl: localStorage.getItem('landslide_backend_url') || defaultBackend,
+    backendUrl: defaultBackend,
     rainfallDefaults: {},
     formInputs: { dem: null, slope: null, soilType: null, soilThickness: null },
     geotopCards: [],
@@ -959,13 +960,26 @@
   async function handlePrepCompleted(job) {
     state.ml.prepJobId = job.job_id;
     dataPrepStatus.textContent = `Data preparation completed. stage1_base_dataset.csv ready.${job.summary && job.summary.memory_used_mb ? ' Memory used: ' + job.summary.memory_used_mb + ' MB.' : ''}`;
-    const previewUrl = `${apiBase()}${job.outputs['stage1_base_dataset_preview.csv'] || job.outputs['stage1_base_dataset_preview.csv'.replace('.csv','')] || ''}`;
-    const previewKey = Object.keys(job.outputs).find(k => k.toLowerCase().includes('preview'));
+    const previewKey = Object.keys(job.outputs || {}).find(k => k.toLowerCase().includes('preview'));
     if (previewKey) {
       const previewText = await fetch(`${apiBase()}${job.outputs[previewKey]}`).then(r => r.text()).catch(() => 'Preview unavailable');
       dataPrepContent.innerHTML = renderCsvPreviewTable(previewText);
       activateVizPanel('dataPrepPanel');
     }
+
+    const downloadEntries = Object.entries(job.outputs || {});
+    if (!downloadEntries.length) {
+      dataPrepDownloads.innerHTML = '<div class="summary-box">No prepared dataset files were returned.</div>';
+    } else {
+      dataPrepDownloads.innerHTML = '';
+      downloadEntries.forEach(([name, relativeUrl]) => {
+        const row = document.createElement('div');
+        row.className = 'layer-row';
+        row.innerHTML = `<span>${name}</span><div class="layer-actions"><a href="${apiBase()}${relativeUrl}" target="_blank" rel="noopener">Download</a></div>`;
+        dataPrepDownloads.appendChild(row);
+      });
+    }
+
     updateResultSummary(`ML data preparation completed.\n${JSON.stringify(job.summary, null, 2)}`);
   }
 
