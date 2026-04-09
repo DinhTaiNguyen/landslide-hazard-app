@@ -72,6 +72,52 @@
     ['min_delta', 1e-5], ['stage2_train_frac', 0.60], ['stage2_val_frac', 0.20], ['stage2_test_frac', 0.20], ['class_threshold', 0.5], ['random_seed', 42]
   ];
 
+
+  function playUiTick() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!window.__uiAudioCtx) window.__uiAudioCtx = new Ctx();
+      const ctx = window.__uiAudioCtx;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.06);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.03, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.09);
+    } catch (_) {}
+  }
+
+  function renderCsvPreviewTable(csvText) {
+    const lines = (csvText || '').trim().split(/\r?\n/).filter(Boolean);
+    if (!lines.length) return '<div class="summary-box">Preview unavailable.</div>';
+    const split = line => {
+      const cells = []; let cur = ''; let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i+1] === '"') { cur += '"'; i++; }
+          else inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+          cells.push(cur); cur = '';
+        } else cur += ch;
+      }
+      cells.push(cur);
+      return cells;
+    };
+    const rows = lines.slice(0, 101).map(split);
+    const head = rows[0] || [];
+    const body = rows.slice(1);
+    const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `<table class="preview-table"><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body.map(r => `<tr>${head.map((_, i) => `<td>${esc(r[i] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  }
+
   const state = {
     backendUrl: localStorage.getItem('landslide_backend_url') || defaultBackend,
     rainfallDefaults: {},
@@ -419,7 +465,7 @@
     const card = document.createElement('div'); card.className = 'geotop-card';
     card.innerHTML = `
       <div class="geotop-header"><div class="geotop-title">GeoTOP folder ${index + 1}</div><div class="status-pill waiting">Waiting</div></div>
-      <div class="field-group"><label class="field-label">Optional event label</label><input class="field-input event-label-input" type="text" placeholder="For example 20210610" /></div>
+      <div class="field-group"><label class="field-label">Optional event, for example 20260610</label><input class="field-input event-label-input" type="text" /></div>
       <input type="file" class="pwp-folder-input" webkitdirectory directory multiple hidden />
       <button type="button" class="small-btn choose-folder-btn">Choose GeoTOP PWP folder</button>
       <div class="summary-box folder-summary">No folder uploaded yet.</div>
@@ -546,7 +592,7 @@
   }
 
   function handleFormCompleted(card, job) {
-    setCardStatus(card, 'Completed', 'completed');
+    setCardStatus(card, `Completed${job.summary && job.summary.memory_used_mb ? ' · ' + job.summary.memory_used_mb + ' MB' : ''}`, 'completed');
     renderResultLayerControls(card.resultLayers, job.job_id, job.outputs, `form_${job.job_id}`);
     updateResultSummary(`Latest FORM job ${job.job_id} completed.\n${JSON.stringify(job.summary, null, 2)}`);
     activateVizPanel('resultSummaryPanel');
@@ -757,12 +803,12 @@
 
   async function handlePrepCompleted(job) {
     state.ml.prepJobId = job.job_id;
-    dataPrepStatus.textContent = `Data preparation completed. stage1_base_dataset.csv ready.`;
+    dataPrepStatus.textContent = `Data preparation completed. stage1_base_dataset.csv ready.${job.summary && job.summary.memory_used_mb ? ' Memory used: ' + job.summary.memory_used_mb + ' MB.' : ''}`;
     const previewUrl = `${apiBase()}${job.outputs['stage1_base_dataset_preview.csv'] || job.outputs['stage1_base_dataset_preview.csv'.replace('.csv','')] || ''}`;
     const previewKey = Object.keys(job.outputs).find(k => k.toLowerCase().includes('preview'));
     if (previewKey) {
       const previewText = await fetch(`${apiBase()}${job.outputs[previewKey]}`).then(r => r.text()).catch(() => 'Preview unavailable');
-      dataPrepContent.textContent = previewText;
+      dataPrepContent.innerHTML = renderCsvPreviewTable(previewText);
       activateVizPanel('dataPrepPanel');
     }
     updateResultSummary(`ML data preparation completed.\n${JSON.stringify(job.summary, null, 2)}`);
@@ -810,7 +856,7 @@
   }
 
   function handleMlCompleted(job) {
-    mlRunStatus.textContent = 'Machine learning completed.';
+    mlRunStatus.textContent = `Machine learning completed.${job.summary && job.summary.memory_used_mb ? ' Memory used: ' + job.summary.memory_used_mb + ' MB.' : ''}`;
     mlResultLayersList.innerHTML = '';
     Object.entries(job.outputs).forEach(([name, relativeUrl]) => {
       if (!name.toLowerCase().endsWith('.asc')) return;
@@ -926,8 +972,8 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
     };
   });
 
-  document.querySelectorAll('.viz-tab').forEach(btn => btn.addEventListener('click', () => activateVizPanel(btn.dataset.viz)));
-  document.querySelectorAll('.right-workflow-tab').forEach(btn => btn.addEventListener('click', () => activateRightPanel(btn.dataset.rightPanel)));
+  document.querySelectorAll('.viz-tab').forEach(btn => btn.addEventListener('click', () => { playUiTick(); activateVizPanel(btn.dataset.viz); }));
+  document.querySelectorAll('.right-workflow-tab').forEach(btn => btn.addEventListener('click', () => { playUiTick(); activateRightPanel(btn.dataset.rightPanel); }));
   basemapSelect.addEventListener('change', () => setBaseLayer(basemapSelect.value));
   document.getElementById('resetViewBtn').addEventListener('click', () => map.setView(defaultMapView.center, defaultMapView.zoom));
   document.getElementById('fitLayerBtn').addEventListener('click', () => { if (activeLayerKey && rasterLayers[activeLayerKey]) map.fitBounds(rasterLayers[activeLayerKey].bounds, { padding: [20,20] }); });

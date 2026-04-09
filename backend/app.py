@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import resource
 import shutil
 import threading
 import uuid
@@ -35,6 +36,14 @@ JOBS: Dict[str, dict] = {}
 
 def now_iso() -> str:
     return datetime.utcnow().isoformat() + "Z"
+
+
+def get_memory_usage_mb() -> float:
+    usage_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if usage_kb > 10_000_000:
+        return round(usage_kb / (1024 * 1024), 2)
+    return round(usage_kb / 1024, 2)
+
 
 
 def save_upload(upload: UploadFile, destination: Path) -> Path:
@@ -162,9 +171,11 @@ async def start_form_run(
             append_log(job_id, "FORM job started")
             result = run_form(inputs=inputs, settings=settings, output_dir=output_dir, log=lambda m: append_log(job_id, m))
             JOBS[job_id]["outputs"] = {name: f"/api/jobs/{job_id}/download/{name}" for name in result.outputs.keys()}
-            JOBS[job_id]["summary"] = result.summary
+            summary = dict(result.summary)
+            summary["memory_used_mb"] = get_memory_usage_mb()
+            JOBS[job_id]["summary"] = summary
             JOBS[job_id]["status"] = "completed"
-            append_log(job_id, "FORM job completed successfully")
+            append_log(job_id, f"FORM job completed successfully | memory used: {summary['memory_used_mb']} MB")
         except Exception as exc:  # noqa: BLE001
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(exc)
@@ -215,13 +226,15 @@ async def prepare_ml_dataset(
                 result.dataset_csv.name: f"/api/jobs/{job_id}/download/{result.dataset_csv.name}",
                 result.preview_csv.name: f"/api/jobs/{job_id}/download/{result.preview_csv.name}",
             }
-            JOBS[job_id]["summary"] = result.summary
+            summary = dict(result.summary)
+            summary["memory_used_mb"] = get_memory_usage_mb()
+            JOBS[job_id]["summary"] = summary
             JOBS[job_id]["detected_maps"] = result.detected_maps
             JOBS[job_id]["detected_events"] = result.detected_events
             JOBS[job_id]["dataset_csv"] = str(result.dataset_csv)
             JOBS[job_id]["reference_asc"] = str((maps_dir / "pit.asc") if (maps_dir / "pit.asc").exists() else next(maps_dir.glob("*.asc")))
             JOBS[job_id]["status"] = "completed"
-            append_log(job_id, "Machine learning data preparation completed")
+            append_log(job_id, f"Machine learning data preparation completed | memory used: {JOBS[job_id]['summary']['memory_used_mb']} MB")
         except Exception as exc:  # noqa: BLE001
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(exc)
@@ -306,9 +319,11 @@ async def run_ml(
                     pass
             JOBS[job_id]["outputs"] = {name: f"/api/jobs/{job_id}/download/{name}" for name in result.output_files.keys()}
             JOBS[job_id]["plots"] = {name: f"/api/jobs/{job_id}/download/{name}" for name in result.plot_files.keys()}
-            JOBS[job_id]["summary"] = result.summary
+            summary = dict(result.summary)
+            summary["memory_used_mb"] = get_memory_usage_mb()
+            JOBS[job_id]["summary"] = summary
             JOBS[job_id]["status"] = "completed"
-            append_log(job_id, "Machine learning training completed")
+            append_log(job_id, f"Machine learning training completed | memory used: {summary['memory_used_mb']} MB")
         except Exception as exc:  # noqa: BLE001
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(exc)

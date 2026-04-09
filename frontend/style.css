@@ -92,3 +92,9 @@ body { overflow: hidden; }
 .right-panel { overflow-y: auto; }
 @media (max-width: 1400px) { .app-shell { grid-template-columns: 320px 1fr 390px; } }
 @media (max-width: 1150px) { body { overflow: auto; } .app-shell { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto; height: auto; } }
+
+.table-scroll { overflow: auto; }
+.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.preview-table th, .preview-table td { border: 1px solid rgba(255,255,255,0.08); padding: 6px 8px; text-align: left; white-space: nowrap; }
+.preview-table thead th { position: sticky; top: 0; background: #162131; z-index: 1; }
+.preview-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.03); }
