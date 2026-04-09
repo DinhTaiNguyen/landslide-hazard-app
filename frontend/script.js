@@ -1,5 +1,5 @@
 (function () {
-  const defaultBackend = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'https://landslide-hazard-app.onrender.com';
+  const defaultBackend = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || 'https://landslide-hazard-app-11015728223.europe-west1.run.app';
   const backendUrlInput = document.getElementById('backendUrlInput');
   const backendStatus = document.getElementById('backendStatus');
   const currentTimeDisplay = document.getElementById('currentTimeDisplay');
