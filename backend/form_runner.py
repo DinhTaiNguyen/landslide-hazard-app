@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import os
 import re
 import resource
@@ -16,7 +17,7 @@ OUT_NODATA = -9999.0
 GAMMA_W = 9.81  # kN/m^3
 MIN_SLOPE_DEG = 0.1
 EPS = 1e-12
-LAYER_DEPTHS_M = np.array([0.01, 0.05, 0.13, 0.25, 0.45, 0.75, 1.10, 1.50], dtype=float)
+LAYER_DEPTHS_M = np.array([0.01, 0.05, 0.13, 0.25, 0.45, 0.75, 1.10, 1.50], dtype=np.float32)
 LAYER_TOPS_M = np.concatenate(([0.0], LAYER_DEPTHS_M[:-1]))
 N_LAYERS = len(LAYER_DEPTHS_M)
 
@@ -74,7 +75,7 @@ def read_ascii_grid(path: Path) -> Tuple[np.ndarray, dict]:
         ncols = int(header["ncols"])
         nrows = int(header["nrows"])
         nodata = float(header.get("nodata_value", -9999))
-        data = np.loadtxt(f, dtype=float).reshape((nrows, ncols))
+        data = np.loadtxt(f, dtype=np.float32).reshape((nrows, ncols))
 
     header_out = {
         "ncols": ncols,
@@ -88,7 +89,7 @@ def read_ascii_grid(path: Path) -> Tuple[np.ndarray, dict]:
 
 
 def write_ascii_grid(path: Path, data: np.ndarray, header: dict, nodata: float = OUT_NODATA) -> None:
-    arr = np.array(data, dtype=float).copy()
+    arr = np.array(data, dtype=np.float32).copy()
     arr[~np.isfinite(arr)] = nodata
 
     with open(path, "w", encoding="utf-8") as f:
@@ -138,12 +139,12 @@ def std_norm_cdf(x: np.ndarray) -> np.ndarray:
 # PARAMETER RASTERS
 # =========================
 def build_parameter_rasters(soiltype: np.ndarray, soil_params: Dict[int, SoilParam]):
-    phi_deg = np.full(soiltype.shape, np.nan, dtype=float)
-    phi_cov = np.full(soiltype.shape, np.nan, dtype=float)
-    c_kpa = np.full(soiltype.shape, np.nan, dtype=float)
-    c_cov = np.full(soiltype.shape, np.nan, dtype=float)
-    gamma_s = np.full(soiltype.shape, np.nan, dtype=float)
-    rho_c_phi = np.full(soiltype.shape, np.nan, dtype=float)
+    phi_deg = np.full(soiltype.shape, np.nan, dtype=np.float32)
+    phi_cov = np.full(soiltype.shape, np.nan, dtype=np.float32)
+    c_kpa = np.full(soiltype.shape, np.nan, dtype=np.float32)
+    c_cov = np.full(soiltype.shape, np.nan, dtype=np.float32)
+    gamma_s = np.full(soiltype.shape, np.nan, dtype=np.float32)
+    rho_c_phi = np.full(soiltype.shape, np.nan, dtype=np.float32)
 
     for soil_id, p in soil_params.items():
         mask = soiltype == soil_id
@@ -213,7 +214,7 @@ def read_time_step_profiles(folder: Path, time_code: str, hdr_ref: dict, setting
 # DEPTH / FOS / BETA
 # =========================
 def build_effective_depth_stack(soilthickness_m: np.ndarray) -> np.ndarray:
-    effective_depths = np.full((N_LAYERS,) + soilthickness_m.shape, np.nan, dtype=float)
+    effective_depths = np.full((N_LAYERS,) + soilthickness_m.shape, np.nan, dtype=np.float32)
     for k in range(N_LAYERS):
         top = LAYER_TOPS_M[k]
         bottom = LAYER_DEPTHS_M[k]
@@ -329,7 +330,7 @@ def compute_beta_layer(
     var_g = np.where(var_g < 0, 0, var_g)
     sigma_g = np.sqrt(var_g)
 
-    beta = np.full(mu_g.shape, np.nan, dtype=float)
+    beta = np.full(mu_g.shape, np.nan, dtype=np.float32)
     mask_sigma = sigma_g > 0
     beta[mask_sigma] = mu_g[mask_sigma] / sigma_g[mask_sigma]
 
@@ -363,6 +364,8 @@ def _log_stats(log: LogFn, name: str, arr: np.ndarray) -> None:
 def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: LogFn) -> RunResult:
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    log("FORM runner started")
+    log(f"PWP folder: {inputs.pwp_folder.name}")
     log("Reading uploaded ASCII grids...")
     slope, hdr_slope = read_ascii_grid(inputs.slope_asc)
     soiltype, hdr_soil = read_ascii_grid(inputs.soiltype_asc)
@@ -386,15 +389,15 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
         | (~np.isin(soiltype, valid_soil_ids))
     )
 
+    rows, cols = slope.shape
     params = build_parameter_rasters(soiltype, settings.soil_params)
+    effective_depth_stack = build_effective_depth_stack(soilthickness).astype(np.float32)
     log(f"Grid size: {rows} x {cols} ({rows * cols:,} cells)")
     log(f"Base valid cells: {int(np.sum(~base_nodata_mask)):,}")
-    effective_depth_stack = build_effective_depth_stack(soilthickness)
-
-    rows, cols = slope.shape
-    fs_min_global = np.full((rows, cols), np.nan, dtype=float)
-    critical_psi_stack = np.full((N_LAYERS, rows, cols), np.nan, dtype=float)
-    critical_surface_pressure = np.full((rows, cols), np.nan, dtype=float)
+    log(f"Initial memory: {current_memory_mb()} MB")
+    fs_min_global = np.full((rows, cols), np.nan, dtype=np.float32)
+    critical_psi_stack = np.full((N_LAYERS, rows, cols), np.nan, dtype=np.float32)
+    critical_surface_pressure = np.full((rows, cols), np.nan, dtype=np.float32)
 
     time_codes = get_time_codes(settings, inputs.pwp_folder)
     log(f"Detected time codes: {', '.join(time_codes)}")
@@ -411,6 +414,7 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
         time_fos_stack = []
 
         for k in range(N_LAYERS):
+            log(f"  Time {time_code}: processing layer {k + 1}/{N_LAYERS}")
             psi = psi_stack[k]
             psi_nodata = pwp_nodata_values[k + 1]
             z_eff = effective_depth_stack[k]
@@ -431,10 +435,10 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
             fos[final_mask] = np.nan
             time_fos_stack.append(fos)
 
-        time_fos_stack = np.stack(time_fos_stack, axis=0)
+        time_fos_stack = np.stack(time_fos_stack, axis=0).astype(np.float32)
         valid_time_mask = np.any(np.isfinite(time_fos_stack), axis=0)
 
-        fs_min_time = np.full((rows, cols), np.nan, dtype=float)
+        fs_min_time = np.full((rows, cols), np.nan, dtype=np.float32)
         fs_min_time[valid_time_mask] = np.nanmin(time_fos_stack[:, valid_time_mask], axis=0)
 
         update_mask = valid_time_mask & (~np.isfinite(fs_min_global) | (fs_min_time < fs_min_global))
@@ -446,6 +450,8 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
 
         valid_cells = int(np.sum(np.isfinite(fs_min_time)))
         log(f"Finished time code {time_code}: {valid_cells} valid cells | memory: {current_memory_mb()} MB")
+        del pwp_profile_stack, psi_stack, time_fos_stack, fs_min_time, valid_time_mask
+        gc.collect()
 
     final_fos_stack = []
     final_beta_stack = []
@@ -487,10 +493,10 @@ def run_form(inputs: InputPaths, settings: FormSettings, output_dir: Path, log: 
     final_beta_stack = np.stack(final_beta_stack, axis=0)
     valid_mask = np.any(np.isfinite(final_fos_stack), axis=0)
 
-    fs_min = np.full((rows, cols), np.nan, dtype=float)
-    fs_min_depth = np.full((rows, cols), np.nan, dtype=float)
-    beta_map = np.full((rows, cols), np.nan, dtype=float)
-    pof_map = np.full((rows, cols), np.nan, dtype=float)
+    fs_min = np.full((rows, cols), np.nan, dtype=np.float32)
+    fs_min_depth = np.full((rows, cols), np.nan, dtype=np.float32)
+    beta_map = np.full((rows, cols), np.nan, dtype=np.float32)
+    pof_map = np.full((rows, cols), np.nan, dtype=np.float32)
 
     fs_min[valid_mask] = np.nanmin(final_fos_stack[:, valid_mask], axis=0)
 

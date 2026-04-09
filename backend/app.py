@@ -177,10 +177,18 @@ async def start_form_run(
             JOBS[job_id]["summary"] = summary
             JOBS[job_id]["status"] = "completed"
             append_log(job_id, f"FORM job completed successfully | memory used: {summary['memory_used_mb']} MB")
+        except MemoryError as exc:
+            JOBS[job_id]["status"] = "failed"
+            JOBS[job_id]["error"] = "MemoryError"
+            append_log(job_id, "ERROR: FORM stopped because the backend ran out of memory.")
+            append_log(job_id, f"Current memory: {get_memory_usage_mb()} MB")
+            for line in traceback.format_exc().strip().splitlines():
+                append_log(job_id, line)
         except Exception as exc:  # noqa: BLE001
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(exc)
             append_log(job_id, f"ERROR: {exc}")
+            append_log(job_id, f"Current memory: {get_memory_usage_mb()} MB")
             for line in traceback.format_exc().strip().splitlines():
                 append_log(job_id, line)
         finally:
