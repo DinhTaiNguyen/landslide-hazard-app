@@ -51,6 +51,11 @@
   const mapEmptyNote = document.getElementById('mapEmptyNote');
   const crsSelect = document.getElementById('crsSelect');
   const basemapSelect = document.getElementById('basemapSelect');
+  const mapWrap = document.querySelector('.map-wrap');
+  const mapResizeHandle = document.getElementById('mapResizeHandle');
+  const mapToolbarCard = document.getElementById('mapToolbarCard');
+  const mapToolbarDragHandle = document.getElementById('mapToolbarDragHandle');
+  const mapOverlayControls = document.getElementById('mapOverlayControls');
 
   const rasterConfigs = {
     dem: { label: 'DEM', input: document.getElementById('demFileInput'), selectedFile: document.getElementById('demSelectedFile'), viewToggle: document.getElementById('demViewToggle') },
@@ -411,6 +416,65 @@
     activeLayerKey = null; mapEmptyNote.style.display = 'block'; clearColorbar(); rasterStats.textContent = 'No active layer';
   }
 
+
+  function setupMovableMapToolbar() {
+    if (!mapToolbarCard || !mapToolbarDragHandle || !mapOverlayControls || !mapWrap) return;
+    let dragging = false;
+    let startX = 0, startY = 0, startLeft = 12, startTop = 12;
+    const clamp = () => {
+      const maxLeft = Math.max(12, mapWrap.clientWidth - mapToolbarCard.offsetWidth - 12);
+      const maxTop = Math.max(12, mapWrap.clientHeight - mapToolbarCard.offsetHeight - 12);
+      const left = Math.min(Math.max(12, parseFloat(mapOverlayControls.style.left || '12')), maxLeft);
+      const top = Math.min(Math.max(12, parseFloat(mapOverlayControls.style.top || '12')), maxTop);
+      mapOverlayControls.style.left = left + 'px';
+      mapOverlayControls.style.top = top + 'px';
+    };
+    mapToolbarDragHandle.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      startX = e.clientX; startY = e.clientY;
+      startLeft = parseFloat(mapOverlayControls.style.left || '12');
+      startTop = parseFloat(mapOverlayControls.style.top || '12');
+      mapToolbarDragHandle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    mapToolbarDragHandle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      mapOverlayControls.style.left = (startLeft + (e.clientX - startX)) + 'px';
+      mapOverlayControls.style.top = (startTop + (e.clientY - startY)) + 'px';
+      clamp();
+    });
+    const stopDrag = () => { dragging = false; };
+    mapToolbarDragHandle.addEventListener('pointerup', stopDrag);
+    mapToolbarDragHandle.addEventListener('pointercancel', stopDrag);
+    window.addEventListener('resize', clamp);
+    clamp();
+  }
+
+  function setupVerticalMapResize() {
+    if (!mapResizeHandle || !mapWrap) return;
+    let dragging = false;
+    let startY = 0;
+    let startHeight = 0;
+    const minHeight = 260;
+    const maxHeight = () => Math.max(320, window.innerHeight - 320);
+    mapResizeHandle.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      startY = e.clientY;
+      startHeight = mapWrap.getBoundingClientRect().height;
+      mapResizeHandle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    mapResizeHandle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const next = Math.min(Math.max(minHeight, startHeight + (e.clientY - startY)), maxHeight());
+      mapWrap.style.height = next + 'px';
+      if (map) map.invalidateSize();
+    });
+    const stop = () => { dragging = false; if (map) map.invalidateSize(); };
+    mapResizeHandle.addEventListener('pointerup', stop);
+    mapResizeHandle.addEventListener('pointercancel', stop);
+  }
+
   function updateInputSummary() {
     const summary = [];
     ['dem','slope','soilType','soilThickness'].forEach(key => { if (state.formInputs[key]) summary.push(`${key}: ${getSafeFileName(state.formInputs[key], key)}`); });
@@ -478,7 +542,8 @@
       const detectedTimeCodes = [...new Set(obj.pwpFiles.map(f => {
         const m = f.name.match(/N(\d+)\.asc$/i); return m ? m[1] : null;
       }).filter(Boolean))].sort();
-      obj.folderSummary.textContent = `${obj.pwpFiles.length} files uploaded${detectedTimeCodes.length ? ` | time codes: ${detectedTimeCodes.join(', ')}` : ''}`;
+      const folderName = (obj.pwpFiles[0]?.webkitRelativePath || '').split('/')[0] || (obj.pwpFiles[0]?.name ? obj.pwpFiles[0].name.replace(/\.[^.]+$/, '') : 'Unknown folder');
+      obj.folderSummary.textContent = `Folder: ${folderName} | ${obj.pwpFiles.length} files uploaded${detectedTimeCodes.length ? ` | time codes: ${detectedTimeCodes.join(', ')}` : ''}`;
       setCardStatus(obj, 'Ready', 'waiting');
       updateInputSummary();
     });
@@ -985,6 +1050,8 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
 
   backendUrlInput.value = state.backendUrl || defaultBackend;
   initMap();
+  setupMovableMapToolbar();
+  setupVerticalMapResize();
   createSoilInputs();
   createGeotopCards();
   initMlHyperparameters();

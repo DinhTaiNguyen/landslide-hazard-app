@@ -77,8 +77,9 @@
       <div class="panel-title">Analyse Map</div>
       <div class="map-wrap">
         <div id="map"></div>
-        <div class="map-overlay-controls">
-          <div class="map-toolbar-card">
+        <div class="map-overlay-controls" id="mapOverlayControls">
+          <div class="map-toolbar-card" id="mapToolbarCard">
+            <div class="map-toolbar-dragbar" id="mapToolbarDragHandle" title="Drag toolbar">⋮⋮ Drag toolbar</div>
             <div class="map-toolbar-grid">
               <div class="toolbar-field">
                 <label for="basemapSelect">Base map</label>
@@ -110,6 +111,7 @@
           </div>
         </div>
       </div>
+      <div id="mapResizeHandle" class="map-resize-handle" title="Drag to resize map"></div>
 
       <div class="bottom-panel">
         <div class="tab-row wrap-tabs">
