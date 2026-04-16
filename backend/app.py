@@ -18,8 +18,6 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from google.cloud import storage
 
 from sensor_routes import router as sensor_router
-app = FastAPI()
-app.include_router(sensor_router)
 
 from form_runner import FormSettings, InputPaths, SoilParam, run_form
 from ml_data_prep import RAINFALL_DEFAULTS, prepare_stage1_dataset
@@ -68,6 +66,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(sensor_router)
 
 JOBS: Dict[str, dict] = {}
 
@@ -245,6 +245,12 @@ def root() -> dict:
         "service": "Landslide Hazard Backend",
         "status": "ok",
         "health": "/api/health",
+        "sensor_endpoints": [
+            "/api/sensors/upload",
+            "/api/sensors/latest",
+            "/api/sensors/history",
+            "/api/sensors/health",
+        ],        
         "endpoints": [
             "/api/health",
             "/api/uploads/chunk",
@@ -269,6 +275,7 @@ def health() -> dict:
         "chunk_upload_backend": "gcs" if GCS_UPLOAD_BUCKET else "local",
         "gcs_upload_bucket": GCS_UPLOAD_BUCKET or None,
     }
+
 
 
 @app.get("/api/rainfall-defaults")
