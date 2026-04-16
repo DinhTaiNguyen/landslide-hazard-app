@@ -17,6 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from google.cloud import storage
 
+from sensor_routes import router as sensor_router
+app = FastAPI()
+app.include_router(sensor_router)
+
 from form_runner import FormSettings, InputPaths, SoilParam, run_form
 from ml_data_prep import RAINFALL_DEFAULTS, prepare_stage1_dataset
 from ml_runner import MLConfig, run_ml_pipeline
