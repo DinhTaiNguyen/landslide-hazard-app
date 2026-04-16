@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import csv
 import os
 import resource
 import shutil
@@ -246,6 +247,7 @@ def root() -> dict:
             "/api/uploads/finalize",
             "/api/form/run",
             "/api/ml/prepare",
+            "/api/ml/register_dataset",
             "/api/ml/run",
         ],
         "cors_allow_origins": CORS_ORIGINS,
@@ -419,6 +421,79 @@ async def start_form_run(
 
     threading.Thread(target=worker, daemon=True).start()
     return {"job_id": job_id, "status": JOBS[job_id]["status"]}
+
+
+def summarize_existing_dataset(dataset_csv: Path, preview_csv: Path) -> dict:
+    with dataset_csv.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.reader(f)
+        rows = list(reader)
+    if not rows:
+        raise ValueError("Uploaded dataset is empty")
+    header = rows[0]
+    data_rows = rows[1:]
+    preview_rows = [header] + data_rows[:300]
+    with preview_csv.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerows(preview_rows)
+    event_idx = header.index("event_id") if "event_id" in header else None
+    detected_events = []
+    if event_idx is not None:
+        detected_events = sorted({str(r[event_idx]) for r in data_rows if len(r) > event_idx and str(r[event_idx]).strip()})
+    return {
+        "source_type": "uploaded_dataset",
+        "dataset_csv": dataset_csv.name,
+        "preview_csv": preview_csv.name,
+        "total_rows": len(data_rows),
+        "total_columns": len(header),
+        "columns": header,
+        "detected_events": detected_events,
+    }
+
+
+@app.post("/api/ml/register_dataset")
+async def register_existing_ml_dataset(upload_manifest_json: str = Form(...)):
+    run_dir = RUNS_DIR / f"run_{uuid.uuid4().hex[:12]}"
+    input_dir = run_dir / "inputs"
+    output_dir = run_dir / "outputs"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    upload_manifest = parse_upload_manifest(upload_manifest_json)
+    if not upload_manifest:
+        raise HTTPException(status_code=400, detail="upload_manifest_json is required")
+
+    dataset_item = None
+    for item in upload_manifest.get("files", []):
+        rel = str(item.get("relative_path", "")).lower()
+        if rel.endswith("stage1_base_dataset.csv") or rel.endswith(".csv"):
+            dataset_item = item
+            break
+    if not dataset_item:
+        raise HTTPException(status_code=400, detail="Uploaded manifest does not include a CSV dataset")
+
+    dataset_csv = output_dir / "stage1_base_dataset.csv"
+    preview_csv = output_dir / "stage1_base_dataset_preview.csv"
+    download_uri_to_path(dataset_item["uri"], dataset_csv)
+    summary = summarize_existing_dataset(dataset_csv, preview_csv)
+    summary["memory_used_mb"] = get_memory_usage_mb()
+
+    job_id = create_job("ml_prepare", run_dir, extra={"output_dir_name": "outputs"})
+    JOBS[job_id]["status"] = "completed"
+    JOBS[job_id]["outputs"] = {
+        dataset_csv.name: f"/api/jobs/{job_id}/download/{dataset_csv.name}",
+        preview_csv.name: f"/api/jobs/{job_id}/download/{preview_csv.name}",
+    }
+    JOBS[job_id]["summary"] = summary
+    JOBS[job_id]["detected_events"] = summary.get("detected_events", [])
+    JOBS[job_id]["dataset_csv"] = str(dataset_csv)
+    JOBS[job_id]["updated_at"] = now_iso()
+    append_log(job_id, f"Existing stage1 dataset uploaded and registered | rows: {summary['total_rows']:,} | columns: {summary['total_columns']}")
+    return {
+        "job_id": job_id,
+        "status": JOBS[job_id]["status"],
+        "summary": JOBS[job_id]["summary"],
+        "outputs": JOBS[job_id]["outputs"],
+    }
 
 
 @app.post("/api/ml/prepare")

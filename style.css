@@ -139,3 +139,8 @@ body { overflow: hidden; padding-bottom: 34px; }
 .map-toolbar-card .toolbar-field.compact { min-width: 0; flex: 0 0 auto; }
 .map-toolbar-card .toolbar-actions.compact { gap: 4px; }
 .map-toolbar-card .toolbar-actions.compact { justify-self: end; }
+
+
+.centered-checkbox{justify-content:center;font-weight:700;text-align:center;}
+.toggle-block{display:flex;flex-direction:column;gap:10px;}
+.existing-ml-data-wrap{display:flex;flex-direction:column;gap:10px;}

@@ -14,6 +14,10 @@
   const mlPlotsContent = document.getElementById('mlPlotsContent');
   const dataPrepStatus = document.getElementById('dataPrepStatus');
   const dataPrepDownloads = document.getElementById('dataPrepDownloads');
+  const alreadyHaveMlDataInput = document.getElementById('alreadyHaveMlDataInput');
+  const existingMlDataWrap = document.getElementById('existingMlDataWrap');
+  const existingMlDatasetInput = document.getElementById('existingMlDatasetInput');
+  const existingMlDatasetSummary = document.getElementById('existingMlDatasetSummary');
   const mlRunStatus = document.getElementById('mlRunStatus');
   const geotopRunCards = document.getElementById('geotopRunCards');
   const geotopRunCountInput = document.getElementById('geotopRunCountInput');
@@ -139,7 +143,9 @@
       rainfall: {},
       prepJobId: null,
       mlJobId: null,
-      labelFile: null
+      labelFile: null,
+      usingExistingDataset: false,
+      existingDatasetFile: null
     }
   };
 
@@ -929,6 +935,10 @@
   }
 
   async function runDataPreparation() {
+    if (alreadyHaveMlDataInput && alreadyHaveMlDataInput.checked) {
+      addConsoleLine(mlConsoleContent, 'warn', 'Existing dataset mode is enabled. Upload stage1_base_dataset.csv instead of running data preparation.');
+      return;
+    }
     if (!(await checkBackend())) return;
     if (!state.ml.mapFiles.length || !state.ml.formOutputFiles.length) {
       addConsoleLine(mlConsoleContent, 'err', 'Upload map folder and FORM outputs folder first.');
@@ -959,7 +969,13 @@
 
   async function handlePrepCompleted(job) {
     state.ml.prepJobId = job.job_id;
-    dataPrepStatus.textContent = `Data preparation completed. stage1_base_dataset.csv ready.${job.summary && job.summary.memory_used_mb ? ' Memory used: ' + job.summary.memory_used_mb + ' MB.' : ''}`;
+    if (job.summary && Array.isArray(job.summary.detected_events) && job.summary.detected_events.length) {
+      state.ml.detectedEvents = job.summary.detected_events.map(String);
+      renderRainfallBoxes();
+      renderStageEventBoxes();
+    }
+    const prepModeLabel = job.summary && job.summary.source_type === 'uploaded_dataset' ? 'Existing dataset uploaded successfully.' : 'Data preparation completed. stage1_base_dataset.csv ready.';
+    dataPrepStatus.textContent = `${prepModeLabel}${job.summary && job.summary.memory_used_mb ? ' Memory used: ' + job.summary.memory_used_mb + ' MB.' : ''}`;
     const previewKey = Object.keys(job.outputs || {}).find(k => k.toLowerCase().includes('preview'));
     if (previewKey) {
       const previewText = await fetch(`${apiBase()}${job.outputs[previewKey]}`).then(r => r.text()).catch(() => 'Preview unavailable');
@@ -981,6 +997,50 @@
     }
 
     updateResultSummary(`ML data preparation completed.\n${JSON.stringify(job.summary, null, 2)}`);
+  }
+
+  function updateExistingMlDatasetUi() {
+    if (existingMlDataWrap) existingMlDataWrap.style.display = alreadyHaveMlDataInput && alreadyHaveMlDataInput.checked ? 'flex' : 'none';
+    state.ml.usingExistingDataset = !!(alreadyHaveMlDataInput && alreadyHaveMlDataInput.checked);
+    if (runDataPrepBtn) runDataPrepBtn.disabled = state.ml.usingExistingDataset;
+    if (runDataPrepBtn) runDataPrepBtn.title = state.ml.usingExistingDataset ? 'Existing dataset mode is enabled. Upload stage1_base_dataset.csv instead.' : '';
+    if (state.ml.usingExistingDataset) {
+      if (dataPrepStatus && !state.ml.prepJobId) dataPrepStatus.textContent = 'Existing dataset mode enabled. Upload stage1_base_dataset.csv to continue.';
+    } else if (!state.ml.prepJobId && dataPrepStatus) {
+      dataPrepStatus.textContent = 'Stage 1 base dataset has not been generated yet.';
+    }
+  }
+
+  async function registerExistingMlDataset() {
+    if (!(await checkBackend())) return;
+    const file = existingMlDatasetInput && existingMlDatasetInput.files ? existingMlDatasetInput.files[0] : null;
+    if (!file) {
+      existingMlDatasetSummary.textContent = 'Please choose stage1_base_dataset.csv first.';
+      return;
+    }
+    state.ml.existingDatasetFile = file;
+    existingMlDatasetSummary.textContent = `Uploading ${file.name}...`;
+    dataPrepStatus.textContent = 'Uploading existing machine learning dataset...';
+    try {
+      const manifest = await uploadChunkedAssets([{ file, relativePath: file.name }], 'ml_existing_dataset', dataPrepStatus);
+      const fd = new FormData();
+      fd.append('upload_manifest_json', JSON.stringify(manifest));
+      const res = await fetch(`${apiBase()}/api/ml/register_dataset`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      state.ml.prepJobId = data.job_id;
+      state.ml.usingExistingDataset = true;
+      if (alreadyHaveMlDataInput) alreadyHaveMlDataInput.checked = true;
+      updateExistingMlDatasetUi();
+      addConsoleLine(mlConsoleContent, 'info', `Existing dataset registered as prep job ${data.job_id}`);
+      await handlePrepCompleted(data);
+      const summary = data.summary || {};
+      existingMlDatasetSummary.innerHTML = `Uploaded successfully.<br>Rows: ${summary.total_rows ?? 'N/A'}<br>Columns: ${summary.total_columns ?? 'N/A'}<br>Events: ${summary.detected_events ? summary.detected_events.join(', ') : 'N/A'}`;
+    } catch (err) {
+      existingMlDatasetSummary.textContent = `Upload failed: ${err.message}`;
+      dataPrepStatus.textContent = `Existing dataset upload failed: ${err.message}`;
+      addConsoleLine(mlConsoleContent, 'err', err.message);
+    }
   }
 
   function collectMlConfig() {
@@ -1141,6 +1201,9 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
     };
   });
 
+  if (alreadyHaveMlDataInput) alreadyHaveMlDataInput.addEventListener('change', updateExistingMlDatasetUi);
+  if (existingMlDatasetInput) existingMlDatasetInput.addEventListener('change', registerExistingMlDataset);
+
   document.querySelectorAll('.viz-tab').forEach(btn => btn.addEventListener('click', () => { playUiTick(); activateVizPanel(btn.dataset.viz); }));
   document.querySelectorAll('.right-workflow-tab').forEach(btn => btn.addEventListener('click', () => { playUiTick(); activateRightPanel(btn.dataset.rightPanel); }));
   basemapSelect.addEventListener('change', () => setBaseLayer(basemapSelect.value));
@@ -1162,6 +1225,7 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
   createGeotopCards();
   initMlHyperparameters();
   stage2ConfigWrap.style.display = stage2EnabledInput.checked ? 'block' : 'none';
+  updateExistingMlDatasetUi();
   updateInputSummary();
   updateCurrentTime();
   setInterval(updateCurrentTime, 1000);
