@@ -6,6 +6,7 @@
   <title>Landslide Hazard App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="config.js"></script>
 </head>
 <body>
@@ -29,7 +30,12 @@
     </header>
 
     <aside class="card side-panel left-panel">
-      <div class="panel-title">Data Input</div>
+      <div class="panel-title">Left Panel</div>
+      <div class="tab-row left-tab-row">
+        <button class="left-panel-tab active" data-left-panel="dataInputLeftPanel" type="button">Data Input</button>
+        <button class="left-panel-tab" data-left-panel="monitoringDataLeftPanel" type="button">Monitoring Data</button>
+      </div>
+      <div id="dataInputLeftPanel" class="left-subpanel active">
       <div class="section-block">
         <div class="section-title">Required raster maps for FORM</div>
         <div class="field-group">
@@ -73,6 +79,35 @@
         <div class="section-title">Status</div>
         <div id="uploadStatus" class="summary-box">Waiting for uploads...</div>
         <div id="rasterStats" class="summary-box">No active layer</div>
+      </div>
+      </div>
+      <div id="monitoringDataLeftPanel" class="left-subpanel">
+        <div class="section-block">
+          <div class="section-title">Monitoring Data</div>
+          <div class="field-group"><label class="field-label" for="monitorSensorList">Sensor list</label><select id="monitorSensorList" class="field-input"></select></div>
+          <div class="field-group"><label class="field-label" for="monitorSensorId">Sensor ID</label><input id="monitorSensorId" class="field-input" type="text" placeholder="Selected sensor will appear here" /></div>
+          <div class="field-group"><label class="field-label" for="monitorHistoryLimit">History fetch limit</label><input id="monitorHistoryLimit" class="field-input" type="number" value="5000" min="1" max="5000" step="1" /></div>
+          <div class="field-group"><label class="field-label" for="monitorStartTime">Start time</label><input id="monitorStartTime" class="field-input" type="datetime-local" step="1" /></div>
+          <div class="field-group"><label class="field-label" for="monitorEndTime">End time</label><input id="monitorEndTime" class="field-input" type="datetime-local" step="1" /></div>
+          <label class="checkbox-row"><input id="monitorIncludeEndBuffer" type="checkbox" checked /> Add 1-second buffer to End time filter</label>
+          <label class="checkbox-row"><input id="monitorRedrawLast100Rows" type="checkbox" checked /> Redraw last 100 table rows during polling</label>
+          <div class="field-group"><label class="field-label" for="monitorNoSignalSeconds">No-signal timeout (seconds)</label><input id="monitorNoSignalSeconds" class="field-input" type="number" value="6" min="1" step="1" /></div>
+          <div class="field-group"><label class="field-label" for="monitorPollSeconds">Polling interval (seconds)</label><input id="monitorPollSeconds" class="field-input" type="number" value="2" min="1" step="1" /></div>
+          <div class="button-row two-buttons">
+            <button id="monitorStartPollingBtn" type="button" class="primary-btn">Start polling</button>
+            <button id="monitorStopPollingBtn" type="button" class="small-btn danger-outline">Stop polling</button>
+          </div>
+        </div>
+        <div id="monitorLatestReadingBox" class="section-block monitor-latest-box" style="display:none;">
+          <div class="section-title">Latest reading</div>
+          <div class="monitor-latest-grid">
+            <div class="summary-box"><strong>Sensor ID</strong><div id="monitorLatestSensorId">-</div></div>
+            <div id="monitorLatestValueCard" class="summary-box"><strong>Latest value</strong><div id="monitorLatestValue">-</div></div>
+            <div class="summary-box"><strong>Latest timestamp</strong><div id="monitorLatestTimestamp">-</div></div>
+            <div class="summary-box"><strong>History rows shown</strong><div id="monitorHistoryRowsShown">-</div></div>
+          </div>
+          <div id="monitorStatusBox" class="summary-box">Monitoring idle.</div>
+        </div>
       </div>
     </aside>
 
@@ -125,6 +160,9 @@
           <button class="viz-tab" data-viz="mlRunningPanel" type="button">Machine Learning Running</button>
           <button class="viz-tab" data-viz="dataPrepPanel" type="button">Data Preparation</button>
           <button class="viz-tab" data-viz="mlAnalysePanel" type="button">Machine Learning Analyse Plot</button>
+          <button id="monitorHistoryChartTabBtn" class="viz-tab" data-viz="monitorHistoryChartPanel" type="button" style="display:none;">History chart</button>
+          <button id="monitorHistoryTableTabBtn" class="viz-tab" data-viz="monitorHistoryTablePanel" type="button" style="display:none;">History table</button>
+          <button id="monitorDebugTabBtn" class="viz-tab" data-viz="monitorDebugPanel" type="button" style="display:none;">Debug</button>
         </div>
 
         <section id="formRunningPanel" class="viz-panel active"><div id="consoleContent" class="console-panel"></div></section>
@@ -133,6 +171,9 @@
         <section id="mlRunningPanel" class="viz-panel"><div id="mlConsoleContent" class="console-panel"></div></section>
         <section id="dataPrepPanel" class="viz-panel"><div id="dataPrepContent" class="summary-scroll table-scroll"><div class="summary-box">No stage1_base_dataset preview yet.</div></div></section>
         <section id="mlAnalysePanel" class="viz-panel"><div id="mlPlotsContent" class="plots-grid">No machine learning plots yet.</div></section>
+        <section id="monitorHistoryChartPanel" class="viz-panel"><div class="summary-scroll"><div class="summary-box">History chart inactive. Click Start polling in Monitoring Data.</div><div class="monitor-history-chart-wrap"><canvas id="monitorHistoryChartCanvas"></canvas></div></div></section>
+        <section id="monitorHistoryTablePanel" class="viz-panel"><div id="monitorHistoryTableWrap" class="summary-scroll table-scroll"><div class="summary-box">History table inactive. Click Start polling in Monitoring Data.</div></div></section>
+        <section id="monitorDebugPanel" class="viz-panel"><div id="monitorDebugContent" class="summary-scroll"><div class="summary-box">No debug info yet.</div></div></section>
       </div>
     </main>
 

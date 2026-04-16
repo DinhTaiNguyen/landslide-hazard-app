@@ -1216,6 +1216,117 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
   runMlBtn.addEventListener('click', runMachineLearning);
   stage2EnabledInput.addEventListener('change', () => { stage2ConfigWrap.style.display = stage2EnabledInput.checked ? 'block' : 'none'; });
 
+
+
+  function initMonitoringDataPanel() {
+    const leftPanelTabs = document.querySelectorAll('.left-panel-tab');
+    const leftSubpanels = document.querySelectorAll('.left-subpanel');
+    const monitorSensorList = document.getElementById('monitorSensorList');
+    const monitorSensorId = document.getElementById('monitorSensorId');
+    const monitorHistoryLimit = document.getElementById('monitorHistoryLimit');
+    const monitorStartTime = document.getElementById('monitorStartTime');
+    const monitorEndTime = document.getElementById('monitorEndTime');
+    const monitorIncludeEndBuffer = document.getElementById('monitorIncludeEndBuffer');
+    const monitorRedrawLast100Rows = document.getElementById('monitorRedrawLast100Rows');
+    const monitorNoSignalSeconds = document.getElementById('monitorNoSignalSeconds');
+    const monitorPollSeconds = document.getElementById('monitorPollSeconds');
+    const monitorStartPollingBtn = document.getElementById('monitorStartPollingBtn');
+    const monitorStopPollingBtn = document.getElementById('monitorStopPollingBtn');
+    const monitorLatestReadingBox = document.getElementById('monitorLatestReadingBox');
+    const monitorLatestSensorId = document.getElementById('monitorLatestSensorId');
+    const monitorLatestValue = document.getElementById('monitorLatestValue');
+    const monitorLatestTimestamp = document.getElementById('monitorLatestTimestamp');
+    const monitorHistoryRowsShown = document.getElementById('monitorHistoryRowsShown');
+    const monitorStatusBox = document.getElementById('monitorStatusBox');
+    const monitorLatestValueCard = document.getElementById('monitorLatestValueCard');
+    const monitorHistoryChartTabBtn = document.getElementById('monitorHistoryChartTabBtn');
+    const monitorHistoryTableTabBtn = document.getElementById('monitorHistoryTableTabBtn');
+    const monitorDebugTabBtn = document.getElementById('monitorDebugTabBtn');
+    const monitorHistoryTableWrap = document.getElementById('monitorHistoryTableWrap');
+    const monitorDebugContent = document.getElementById('monitorDebugContent');
+    const monitorHistoryChartCanvas = document.getElementById('monitorHistoryChartCanvas');
+    if (!monitorSensorList || !monitorHistoryChartCanvas) return;
+    let historyChart = null, rawHistory = [], renderedRows = [], detectedStart='', detectedEnd='';
+    let pollHandle = null, isPolling = false, lastLatestSignature = null, lastHistorySignature = null, lastLatestChangeAt = null, lastGoodLatestText='-';
+
+    const mEsc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const activateLeftPanel = (id) => { leftPanelTabs.forEach(btn => btn.classList.toggle('active', btn.dataset.leftPanel === id)); leftSubpanels.forEach(panel => panel.classList.toggle('active', panel.id === id)); };
+    leftPanelTabs.forEach(btn => btn.addEventListener('click', () => { playUiTick(); activateLeftPanel(btn.dataset.leftPanel); }));
+    const sensorKey = () => (monitorSensorId.value || monitorSensorList.value || '').trim();
+    const fmt = value => { if (!value) return '-'; const d = new Date(value); return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString(); };
+    const toLocalInput = d => { if (!d) return ''; const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+    const parseLocal = value => { if (!value) return null; const d = new Date(value); return Number.isNaN(d.getTime()) ? null : d; };
+    const setStatus = msg => { monitorStatusBox.textContent = msg; };
+    const setDebug = obj => { monitorDebugContent.innerHTML = `<pre>${mEsc(JSON.stringify(obj, null, 2))}</pre>`; };
+    const flashLatest = () => { monitorLatestValueCard.classList.add('monitor-latest-flash'); setTimeout(()=>monitorLatestValueCard.classList.remove('monitor-latest-flash'), 900); };
+    const setNoSignal = (flag) => { if (flag) { monitorLatestValueCard.classList.add('monitor-no-signal'); monitorLatestValue.textContent = 'No Signal'; } else { monitorLatestValueCard.classList.remove('monitor-no-signal'); monitorLatestValue.textContent = lastGoodLatestText; } };
+    const fetchJson = async (url) => { const res = await fetch(url, { cache: 'no-store' }); const text = await res.text(); let data; try { data = JSON.parse(text); } catch { data = text; } if (!res.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data)); return data; };
+    const loadSensorList = async () => {
+      const payload = await fetchJson(`${apiBase()}/api/sensors/latest?_ts=${Date.now()}`); const data = payload.data || {}; const ids = Object.keys(data).sort(); const current = monitorSensorList.value; monitorSensorList.innerHTML='';
+      if (!ids.length) { const opt=document.createElement('option'); opt.value=''; opt.textContent='No sensors found'; monitorSensorList.appendChild(opt); monitorSensorId.value=''; return; }
+      ids.forEach(id => { const opt=document.createElement('option'); opt.value=id; opt.textContent=id; monitorSensorList.appendChild(opt); });
+      monitorSensorList.value = ids.includes(current) ? current : ids[0]; if (!monitorSensorId.value || !ids.includes(monitorSensorId.value)) monitorSensorId.value = monitorSensorList.value;
+    };
+    const fetchLatestOnly = async () => {
+      const payload = await fetchJson(`${apiBase()}/api/sensors/latest?_ts=${Date.now()}`); const data = payload.data || {}; const item = data[sensorKey()]; monitorLatestSensorId.textContent = sensorKey() || '-';
+      if (!item) { monitorLatestTimestamp.textContent='-'; return { changed:false, item:null }; }
+      const latestText = `${item.value ?? '-'} ${item.unit ?? ''}`.trim(); lastGoodLatestText = latestText; monitorLatestValue.textContent = latestText; monitorLatestTimestamp.textContent = fmt(item.timestamp); monitorLatestSensorId.textContent = item.sensor_id || sensorKey();
+      const sig = JSON.stringify({ sensor_id:item.sensor_id, timestamp:item.timestamp, value:item.value }); const changed = !!(lastLatestSignature && lastLatestSignature !== sig); if (!lastLatestSignature || changed) lastLatestChangeAt = Date.now(); if (changed) flashLatest(); lastLatestSignature = sig; setNoSignal(false); return { changed, item };
+    };
+    const renderChart = rows => {
+      if (!rows.length) { if (historyChart) { historyChart.destroy(); historyChart=null; } return; }
+      const labels = rows.map((_,i)=>i+1), lineData = rows.map(r=>r._value), latestDotData = rows.map((r,i)=>i===rows.length-1?r._value:null), labelName = sensorKey() || 'Sensor value';
+      if (historyChart) { historyChart.data.labels = labels; historyChart.data.datasets[0].label = labelName; historyChart.data.datasets[0].data = lineData; historyChart.data.datasets[1].label = 'Latest point'; historyChart.data.datasets[1].data = latestDotData; historyChart.update('none'); return; }
+      historyChart = new Chart(monitorHistoryChartCanvas.getContext('2d'), { type:'line', data:{ labels, datasets:[ { label: labelName, data: lineData, borderColor:'#60a5fa', backgroundColor:'#60a5fa', borderWidth:2, tension:0, fill:false, pointRadius: rows.length>150?0:2, pointHoverRadius:4 }, { label:'Latest point', data: latestDotData, showLine:false, pointRadius:8, pointHoverRadius:10, pointStyle:'circle', pointBackgroundColor:'#f59e0b', pointBorderColor:'#ffffff', pointBorderWidth:2 } ] }, options:{ responsive:true, maintainAspectRatio:false, animation:false, plugins:{ legend:{ display:true, labels:{ usePointStyle:true, pointStyle:'circle', boxWidth:16, boxHeight:16, padding:18 } }, tooltip:{ callbacks:{ title: items => { const idx = items[0]?.dataIndex ?? -1; return idx >= 0 && renderedRows[idx] ? fmt(renderedRows[idx].timestamp) : ''; }, label: context => { const idx = context.dataIndex; const row = renderedRows[idx]; if (!row) return context.formattedValue; return context.datasetIndex===1 ? `Latest point: ${row._value} ${row.unit || ''}` : `${row._value} ${row.unit || ''}`; } } } }, scales:{ x:{ title:{ display:true, text:'History index (past → present)' }, ticks:{ autoSkip:true, maxTicksLimit:15 } }, y:{ beginAtZero:false, title:{ display:true, text:'Value' } } } } });
+    };
+    const renderTable = rows => {
+      const rowsToDraw = (isPolling && monitorRedrawLast100Rows.checked) ? rows.slice(-100) : rows;
+      if (!rowsToDraw.length) { monitorHistoryTableWrap.innerHTML = '<div class="summary-box">No rows to display.</div>'; return; }
+      const startIdx = rows.length - rowsToDraw.length;
+      monitorHistoryTableWrap.innerHTML = `<table><thead><tr><th>#</th><th>Timestamp</th><th>Value</th><th>Unit</th><th>Status</th><th>Type</th><th>Source</th></tr></thead><tbody>${rowsToDraw.map((r,idx)=>`<tr><td>${startIdx+idx+1}</td><td>${mEsc(fmt(r.timestamp))}</td><td>${mEsc(String(r._value))}</td><td>${mEsc(r.unit||'')}</td><td>${mEsc(r.status||'')}</td><td>${mEsc(r.sensor_type||'')}</td><td>${mEsc(r.source||'')}</td></tr>`).join('')}</tbody></table>`;
+    };
+    const renderSummary = rows => {
+      if (!rows.length) return document.getElementById('historySummary') && (document.getElementById('historySummary').textContent = 'No history rows match the selected time range.');
+      const values = rows.map(r=>r._value); const el = document.getElementById('historySummary'); if (el) el.textContent = `Showing ${rows.length} row(s) from past to present. Range: ${fmt(rows[0].timestamp)} → ${fmt(rows[rows.length - 1].timestamp)}. Min=${Math.min(...values)}, Max=${Math.max(...values)}.`;
+    };
+    const applyFilterAndRender = () => {
+      const start = parseLocal(monitorStartTime.value), end = parseLocal(monitorEndTime.value), endAdjusted = end && monitorIncludeEndBuffer.checked ? new Date(end.getTime()+1000) : end;
+      const rows = rawHistory.map(item => ({...item, _dt:new Date(item.timestamp), _value:Number(item.value)})).filter(item => !Number.isNaN(item._dt.getTime()) && Number.isFinite(item._value)).filter(item => !start || item._dt >= start).filter(item => !endAdjusted || item._dt < endAdjusted).sort((a,b)=>a._dt-b._dt);
+      renderedRows = rows; renderChart(rows); renderTable(rows); renderSummary(rows); monitorHistoryRowsShown.textContent = rows.length;
+      setDebug({ selected_sensor:sensorKey(), raw_history_rows: rawHistory.length, filtered_history_rows: rows.length, dropped_rows: rawHistory.length - rows.length, detected_start: detectedStart, detected_end: detectedEnd, current_start: monitorStartTime.value, current_end: monitorEndTime.value, end_buffer_enabled: monitorIncludeEndBuffer.checked, redraw_last_100_rows_during_polling: monitorRedrawLast100Rows.checked, polling_active: isPolling, no_signal_timeout_seconds: Number(monitorNoSignalSeconds.value||6), no_signal_active: !!(isPolling && lastLatestChangeAt && Date.now()-lastLatestChangeAt > Number(monitorNoSignalSeconds.value||6)*1000), latest_point_legend: historyChart?.data?.datasets?.[1]?.label || 'Latest point' });
+      return rows;
+    };
+    const fetchHistoryOnly = async (updateEndDuringPolling=false) => {
+      if (!sensorKey()) return { rows: [], changed: false };
+      const payload = await fetchJson(`${apiBase()}/api/sensors/history?sensor_id=${encodeURIComponent(sensorKey())}&limit=${encodeURIComponent(Math.min(5000, Math.max(1, Number(monitorHistoryLimit.value||5000))))}&_ts=${Date.now()}`); rawHistory = Array.isArray(payload.data) ? payload.data : [];
+      const cleaned = rawHistory.map(item => ({...item, _dt:new Date(item.timestamp), _value:Number(item.value)})).filter(item => !Number.isNaN(item._dt.getTime()) && Number.isFinite(item._value)).sort((a,b)=>a._dt-b._dt);
+      if (cleaned.length) { detectedStart = toLocalInput(cleaned[0]._dt); detectedEnd = toLocalInput(cleaned[cleaned.length-1]._dt); if (!monitorStartTime.value) monitorStartTime.value = detectedStart; if (updateEndDuringPolling) monitorEndTime.value = detectedEnd; else if (!monitorEndTime.value) monitorEndTime.value = detectedEnd; }
+      const rows = applyFilterAndRender(); const sig = rows.length ? `${rows.length}|${rows[rows.length-1].timestamp}|${rows[rows.length-1]._value}` : '0'; const changed = sig !== lastHistorySignature; lastHistorySignature = sig; return { rows, changed };
+    };
+    const poll = async () => {
+      try {
+        const currentSensor = sensorKey(); await loadSensorList(); if (currentSensor) { monitorSensorId.value = currentSensor; if ([...monitorSensorList.options].some(o=>o.value===currentSensor)) monitorSensorList.value = currentSensor; }
+        const [latestResult, historyResult] = await Promise.all([fetchLatestOnly(), fetchHistoryOnly(true)]);
+        const noSignal = lastLatestChangeAt && (Date.now() - lastLatestChangeAt > Math.max(1, Number(monitorNoSignalSeconds.value||6))*1000); setNoSignal(!!noSignal);
+        monitorLatestReadingBox.style.display = 'block'; [monitorHistoryChartTabBtn, monitorHistoryTableTabBtn, monitorDebugTabBtn].forEach(btn => btn.style.display='inline-flex');
+        setStatus(`Polling every ${Math.max(1, Number(monitorPollSeconds.value||2))} second(s). Latest changed: ${latestResult.changed ? 'yes' : 'no'}. History updated: ${historyResult.changed ? 'yes' : 'no'}. No Signal: ${noSignal ? 'yes' : 'no'}. Rows shown: ${historyResult.rows.length}.`);
+      } catch (err) { setStatus(`Polling failed: ${err.message}`); }
+    };
+    const startPolling = () => { stopPolling(); isPolling = true; monitorLatestReadingBox.style.display='block'; [monitorHistoryChartTabBtn, monitorHistoryTableTabBtn, monitorDebugTabBtn].forEach(btn => btn.style.display='inline-flex'); activateVizPanel('monitorHistoryChartPanel'); poll(); pollHandle = setInterval(poll, Math.max(1, Number(monitorPollSeconds.value||2))*1000); };
+    const stopPolling = () => { if (pollHandle) clearInterval(pollHandle); pollHandle = null; isPolling = false; setNoSignal(false); applyFilterAndRender(); setStatus('Stopped polling.'); };
+
+    monitorSensorList.addEventListener('change', async () => { monitorSensorId.value = monitorSensorList.value; const [_, result] = await Promise.all([fetchLatestOnly(), fetchHistoryOnly(false)]); setStatus(`Sensor changed to ${sensorKey()}. Rows shown: ${result.rows.length}`); });
+    monitorSensorId.addEventListener('change', async () => { const [_, result] = await Promise.all([fetchLatestOnly(), fetchHistoryOnly(false)]); setStatus(`Manual sensor changed to ${sensorKey()}. Rows shown: ${result.rows.length}`); });
+    monitorStartTime.addEventListener('change', () => { const rows = applyFilterAndRender(); setStatus(`Start time changed. Rows shown: ${rows.length}`); });
+    monitorEndTime.addEventListener('change', () => { const rows = applyFilterAndRender(); setStatus(`End time changed. Rows shown: ${rows.length}`); });
+    monitorIncludeEndBuffer.addEventListener('change', () => { const rows = applyFilterAndRender(); setStatus(`End time buffer changed. Rows shown: ${rows.length}`); });
+    monitorRedrawLast100Rows.addEventListener('change', () => { applyFilterAndRender(); setStatus('Table redraw mode changed.'); });
+    monitorStartPollingBtn.addEventListener('click', startPolling);
+    monitorStopPollingBtn.addEventListener('click', stopPolling);
+
+    loadSensorList().then(() => Promise.all([fetchLatestOnly(), fetchHistoryOnly(false)])).then(([, result]) => { lastLatestChangeAt = Date.now(); setStatus(`Monitoring ready. Rows shown: ${result.rows.length}`); }).catch(err => setStatus(`Monitoring init failed: ${err.message}`));
+  }
+
   backendUrlInput.value = state.backendUrl || defaultBackend;
   initMap();
   setupMovableMapToolbar();
@@ -1229,5 +1340,6 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
   updateInputSummary();
   updateCurrentTime();
   setInterval(updateCurrentTime, 1000);
+  initMonitoringDataPanel();
   checkBackend();
 })();
