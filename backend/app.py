@@ -8,7 +8,7 @@ import shutil
 import threading
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -47,7 +47,7 @@ def get_storage_client() -> storage.Client:
 
 
 def now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def get_memory_usage_mb() -> float:
@@ -250,7 +250,12 @@ def root() -> dict:
             "/api/sensors/latest",
             "/api/sensors/history",
             "/api/sensors/health",
-        ],        
+        ],
+        "monitoring_endpoints": [
+            "/api/monitoring/upload-image",
+            "/api/monitoring/latest",
+            "/api/monitoring/history",
+        ],
         "endpoints": [
             "/api/health",
             "/api/uploads/chunk",

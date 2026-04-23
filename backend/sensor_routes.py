@@ -1,19 +1,32 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/api/sensors", tags=["sensors"])
+router = APIRouter(tags=["sensors", "monitoring"])
 
-DATA_DIR = Path("sensor_data")
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "sensor_data"
 DATA_DIR.mkdir(exist_ok=True)
 LATEST_FILE = DATA_DIR / "latest.json"
 HISTORY_FILE = DATA_DIR / "history.jsonl"
+
+MONITORING_DIR = BASE_DIR / "monitoring_data"
+MONITORING_DIR.mkdir(exist_ok=True)
+MONITORING_IMAGES_DIR = MONITORING_DIR / "images"
+MONITORING_META_DIR = MONITORING_DIR / "metadata"
+MONITORING_IMAGES_DIR.mkdir(exist_ok=True)
+MONITORING_META_DIR.mkdir(exist_ok=True)
+MONITORING_INDEX_FILE = MONITORING_DIR / "index.jsonl"
+API_KEY = os.getenv("MONITORING_API_KEY", "").strip()
 
 
 class SensorReading(BaseModel):
@@ -37,7 +50,34 @@ def _read_latest() -> dict:
         raise HTTPException(status_code=500, detail=f"Failed to read latest sensor data: {exc}") from exc
 
 
-@router.post("/upload")
+def _safe_name(value: str, fallback: str = "unknown") -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", (value or "").strip())
+    return cleaned[:120] or fallback
+
+
+def _monitoring_index_tail(device_id: Optional[str], limit: int) -> list[dict]:
+    if not MONITORING_INDEX_FILE.exists():
+        return []
+    rows = []
+    try:
+        with MONITORING_INDEX_FILE.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if device_id and item.get("device_id") != device_id:
+                    continue
+                rows.append(item)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read monitoring history: {exc}") from exc
+    return rows[-limit:]
+
+
+@router.post("/api/sensors/upload")
 def upload_sensor(reading: SensorReading):
     record = reading.model_dump()
     record["timestamp"] = reading.timestamp.astimezone(timezone.utc).isoformat()
@@ -48,7 +88,8 @@ def upload_sensor(reading: SensorReading):
     try:
         LATEST_FILE.write_text(json.dumps(latest, indent=2), encoding="utf-8")
         with HISTORY_FILE.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record) + "\n")
+            f.write(json.dumps(record) + "
+")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to store sensor data: {exc}") from exc
 
@@ -60,12 +101,12 @@ def upload_sensor(reading: SensorReading):
     }
 
 
-@router.get("/latest")
+@router.get("/api/sensors/latest")
 def get_latest():
     return {"status": "ok", "data": _read_latest()}
 
 
-@router.get("/history")
+@router.get("/api/sensors/history")
 def get_history(
     sensor_id: str = Query(..., description="Sensor ID to filter"),
     limit: int = Query(100, ge=1, le=5000),
@@ -92,7 +133,7 @@ def get_history(
     return {"status": "ok", "data": rows[-limit:]}
 
 
-@router.get("/health")
+@router.get("/api/sensors/health")
 def sensors_health():
     return {
         "status": "ok",
@@ -100,4 +141,99 @@ def sensors_health():
         "time": datetime.now(timezone.utc).isoformat(),
         "latest_file_exists": LATEST_FILE.exists(),
         "history_file_exists": HISTORY_FILE.exists(),
+        "monitoring_index_exists": MONITORING_INDEX_FILE.exists(),
     }
+
+
+@router.post("/api/monitoring/upload-image")
+async def upload_monitoring_image(
+    request: Request,
+    file: UploadFile = File(...),
+    device_id: str = Form(...),
+    captured_at_utc: str = Form(...),
+    source: str = Form("pc_camera"),
+):
+    if API_KEY:
+        incoming_key = request.headers.get("x-api-key", "")
+        if incoming_key != API_KEY:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+    content_type = (file.content_type or "").lower()
+    if content_type not in {"image/jpeg", "image/jpg", "image/png"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported image type: {file.content_type}")
+
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    ext = ".jpg" if content_type in {"image/jpeg", "image/jpg"} else ".png"
+    device_safe = _safe_name(device_id, "device")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    uid = uuid.uuid4().hex[:8]
+    safe_name = f"{device_safe}_{stamp}_{uid}{ext}"
+
+    device_img_dir = MONITORING_IMAGES_DIR / device_safe
+    device_meta_dir = MONITORING_META_DIR / device_safe
+    device_img_dir.mkdir(parents=True, exist_ok=True)
+    device_meta_dir.mkdir(parents=True, exist_ok=True)
+
+    image_path = device_img_dir / safe_name
+    meta_path = device_meta_dir / f"{Path(safe_name).stem}.json"
+    latest_path = device_img_dir / "latest.jpg"
+
+    try:
+        image_path.write_bytes(payload)
+        latest_path.write_bytes(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save uploaded image: {exc}") from exc
+
+    metadata = {
+        "status": "ok",
+        "device_id": device_id,
+        "captured_at_utc": captured_at_utc,
+        "received_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+        "original_filename": file.filename,
+        "content_type": file.content_type,
+        "size_bytes": len(payload),
+        "saved_as": safe_name,
+        "image_path": str(image_path.relative_to(BASE_DIR)),
+        "latest_path": str(latest_path.relative_to(BASE_DIR)),
+        "client_host": request.client.host if request.client else None,
+    }
+
+    try:
+        meta_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        with MONITORING_INDEX_FILE.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(metadata) + "
+")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save metadata: {exc}") from exc
+
+    return metadata
+
+
+@router.get("/api/monitoring/latest")
+def get_latest_monitoring_image(device_id: str = Query(...)):
+    device_safe = _safe_name(device_id, "device")
+    latest_path = MONITORING_IMAGES_DIR / device_safe / "latest.jpg"
+    latest_meta = None
+    for item in reversed(_monitoring_index_tail(device_id, 200)):
+        if item.get("device_id") == device_id:
+            latest_meta = item
+            break
+    return {
+        "status": "ok",
+        "device_id": device_id,
+        "latest_exists": latest_path.exists(),
+        "latest_image_path": str(latest_path.relative_to(BASE_DIR)) if latest_path.exists() else None,
+        "metadata": latest_meta,
+    }
+
+
+@router.get("/api/monitoring/history")
+def get_monitoring_history(
+    device_id: str = Query(...),
+    limit: int = Query(100, ge=1, le=5000),
+):
+    return {"status": "ok", "device_id": device_id, "data": _monitoring_index_tail(device_id, limit)}
