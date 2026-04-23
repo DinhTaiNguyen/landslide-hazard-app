@@ -1327,6 +1327,215 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
     loadSensorList().then(() => Promise.all([fetchLatestOnly(), fetchHistoryOnly(false)])).then(([, result]) => { lastLatestChangeAt = Date.now(); setStatus(`Monitoring ready. Rows shown: ${result.rows.length}`); }).catch(err => setStatus(`Monitoring init failed: ${err.message}`));
   }
 
+
+
+  function initCameraPanel() {
+    const cameraPanel = document.getElementById('cameraLeftPanel');
+    if (!cameraPanel) return;
+    const leftPanelTabs = document.querySelectorAll('.left-panel-tab');
+    const cameraDeviceId = document.getElementById('cameraDeviceId');
+    const cameraHistoryStart = document.getElementById('cameraHistoryStart');
+    const cameraHistoryEnd = document.getElementById('cameraHistoryEnd');
+    const cameraSignalThreshold = document.getElementById('cameraSignalThreshold');
+    const cameraPollingInterval = document.getElementById('cameraPollingInterval');
+    const cameraHistorySearchBtn = document.getElementById('cameraHistorySearchBtn');
+    const cameraLast10MinBtn = document.getElementById('cameraLast10MinBtn');
+    const cameraLast1HourBtn = document.getElementById('cameraLast1HourBtn');
+    const cameraLast24HourBtn = document.getElementById('cameraLast24HourBtn');
+    const cameraAllHistoryBtn = document.getElementById('cameraAllHistoryBtn');
+    const cameraClearTimeBtn = document.getElementById('cameraClearTimeBtn');
+    const cameraToggleRefreshBtn = document.getElementById('cameraToggleRefreshBtn');
+    const cameraClearDebugBtn = document.getElementById('cameraClearDebugBtn');
+    const cameraSignalPill = document.getElementById('cameraSignalPill');
+    const cameraSignalText = document.getElementById('cameraSignalText');
+    const cameraSignalMessage = document.getElementById('cameraSignalMessage');
+    const cameraStatDevice = document.getElementById('cameraStatDevice');
+    const cameraStatLatest = document.getElementById('cameraStatLatest');
+    const cameraStatCount = document.getElementById('cameraStatCount');
+    const cameraLatestMeta = document.getElementById('cameraLatestMeta');
+    const cameraLatestWrap = document.getElementById('cameraLatestWrap');
+    const cameraLatestImage = document.getElementById('cameraLatestImage');
+    const cameraNoSignalOverlay = document.getElementById('cameraNoSignalOverlay');
+    const cameraChipDevice = document.getElementById('cameraChipDevice');
+    const cameraChipTime = document.getElementById('cameraChipTime');
+    const cameraChipAge = document.getElementById('cameraChipAge');
+    const cameraHistoryMeta = document.getElementById('cameraHistoryMeta');
+    const cameraHistoryGrid = document.getElementById('cameraHistoryGrid');
+    const cameraDebugTabBtn = document.getElementById('cameraDebugTabBtn');
+    const cameraImageViewerTabBtn = document.getElementById('cameraImageViewerTabBtn');
+    const cameraDebugContent = document.getElementById('cameraDebugContent');
+    const cameraViewerInfo = document.getElementById('cameraViewerInfo');
+    const cameraViewerStage = document.getElementById('cameraViewerStage');
+    const cameraViewerImage = document.getElementById('cameraViewerImage');
+    const cameraViewerZoomOutBtn = document.getElementById('cameraViewerZoomOutBtn');
+    const cameraViewerZoomInBtn = document.getElementById('cameraViewerZoomInBtn');
+    const cameraViewerResetBtn = document.getElementById('cameraViewerResetBtn');
+    const cameraViewerCloseBtn = document.getElementById('cameraViewerCloseBtn');
+    if (!cameraHistoryGrid || !cameraViewerImage) return;
+
+    let autoRefresh = true;
+    let refreshHandle = null;
+    let latestData = null;
+    let historyData = [];
+    let viewerScale = 1, viewerX = 0, viewerY = 0, dragging = false, dragStartX = 0, dragStartY = 0;
+
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const fetchJson2 = async url => { const res = await fetch(url, { cache: 'no-store' }); const text = await res.text(); let data = {}; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; } if (!res.ok) throw new Error(typeof data === 'string' ? data : (data.detail || data.error || text || res.statusText)); return data; };
+    const fmt = iso => { if (!iso) return '-'; const d = new Date(iso); return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString(); };
+    const toLocalInput = d => { if (!d) return ''; const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+    const toIso = v => { if (!v) return null; const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d.toISOString(); };
+    const ageSec = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? null : Math.floor((Date.now()-d.getTime())/1000); };
+    const ageText = sec => { if (sec === null || sec === undefined) return '-'; if (sec < 60) return `${sec}s ago`; if (sec < 3600) return `${Math.floor(sec/60)}m ${sec%60}s ago`; return `${Math.floor(sec/3600)}h ${Math.floor((sec%3600)/60)}m ago`; };
+    const setDebug = (msg, obj=null) => { const t = new Date().toLocaleTimeString(); const line = `[${t}] ${msg}${obj ? ' ' + JSON.stringify(obj, null, 2) : ''}`; cameraDebugContent.innerHTML = `<pre>${esc(line + '\n\n' + (cameraDebugContent.textContent || '').trim())}</pre>`; };
+    const buildUrl = (path, params={}) => { const u = new URL(`${apiBase()}${path}`); Object.entries(params).forEach(([k,v]) => { if (v !== null && v !== undefined && v !== '') u.searchParams.set(k, v); }); return u.toString(); };
+    const setSignal = (good, text, message='') => {
+      cameraSignalPill.classList.remove('good','bad','waiting');
+      cameraSignalPill.classList.add(good ? 'good' : 'bad');
+      cameraSignalText.textContent = text;
+      if (message) cameraSignalMessage.textContent = message;
+    };
+    const setViewerTransform = () => { cameraViewerImage.style.transform = `translate(${viewerX}px, ${viewerY}px) scale(${viewerScale})`; };
+    const resetViewer = () => { viewerScale = 1; viewerX = 0; viewerY = 0; setViewerTransform(); };
+    const openViewer = (url, ts) => {
+      if (!url) return;
+      cameraImageViewerTabBtn.style.display = 'inline-flex';
+      cameraViewerImage.src = url;
+      cameraViewerInfo.textContent = `${fmt(ts)} • Mouse wheel to zoom, drag to pan`;
+      resetViewer();
+      activateVizPanel('cameraImageViewerPanel');
+    };
+    const filterHistory = items => {
+      const startIso = toIso(cameraHistoryStart.value);
+      const endIso = toIso(cameraHistoryEnd.value);
+      const startMs = startIso ? new Date(startIso).getTime() : null;
+      const endMs = endIso ? new Date(endIso).getTime() : null;
+      return (items || []).filter(item => {
+        const t = new Date(item.timestamp || item.captured_at_utc || '').getTime();
+        if (!Number.isFinite(t)) return false;
+        if (startMs !== null && t < startMs) return false;
+        if (endMs !== null && t > endMs) return false;
+        return true;
+      });
+    };
+    const renderHistory = items => {
+      cameraHistoryGrid.innerHTML = '';
+      if (!items.length) {
+        cameraHistoryGrid.innerHTML = '<div class="summary-box">No historical images found for the selected time duration.</div>';
+        return;
+      }
+      [...items].sort((a,b) => new Date(b.timestamp || b.captured_at_utc || 0) - new Date(a.timestamp || a.captured_at_utc || 0)).forEach((item, idx) => {
+        const url = item.image_url || item.path || item.url || '';
+        const ts = item.timestamp || item.captured_at_utc || '';
+        const card = document.createElement('article');
+        card.className = 'camera-history-card';
+        card.innerHTML = `<img src="${url}" alt="Historical image ${idx+1}"><div class="camera-history-card-body"><div class="camera-history-time">${esc(fmt(ts))}</div><div class="camera-history-age">${esc(ageText(ageSec(ts)))}</div></div>`;
+        card.addEventListener('click', () => openViewer(url, ts));
+        cameraHistoryGrid.appendChild(card);
+      });
+    };
+    const setTimeWindowMinutes = mins => { const end = new Date(); const start = new Date(end.getTime() - mins*60*1000); cameraHistoryEnd.value = toLocalInput(end); cameraHistoryStart.value = toLocalInput(start); };
+    const setTimeWindowHours = hrs => { const end = new Date(); const start = new Date(end.getTime() - hrs*3600*1000); cameraHistoryEnd.value = toLocalInput(end); cameraHistoryStart.value = toLocalInput(start); };
+    const ensureCameraTabs = () => { cameraDebugTabBtn.style.display = 'inline-flex'; };
+
+    async function loadLatestCamera() {
+      const deviceId = cameraDeviceId.value.trim();
+      const url = buildUrl('/api/monitoring/latest', { device_id: deviceId, _ts: Date.now() });
+      setDebug('Loading latest camera image', { url });
+      const data = await fetchJson2(url);
+      latestData = data;
+      const ts = data.timestamp || data.captured_at_utc || data.latest_timestamp || null;
+      const imageUrl = data.image_url || data.latest_image_url || data.latest_image_path || '';
+      cameraStatDevice.textContent = deviceId || '-';
+      cameraStatLatest.textContent = ts ? new Date(ts).toLocaleTimeString() : '-';
+      cameraChipDevice.textContent = `Device: ${deviceId || '-'}`;
+      cameraChipTime.textContent = `Time: ${fmt(ts)}`;
+      cameraChipAge.textContent = `Age: ${ageText(ageSec(ts))}`;
+      cameraLatestMeta.textContent = ts ? `Latest image received at ${fmt(ts)}` : 'No latest image returned by API.';
+      if (imageUrl) {
+        cameraLatestImage.src = imageUrl + (imageUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+        cameraLatestImage.dataset.full = imageUrl;
+        cameraLatestWrap.classList.add('has-image');
+      } else {
+        cameraLatestImage.removeAttribute('src');
+        cameraLatestWrap.classList.remove('has-image');
+      }
+      const threshold = Math.max(5, parseInt(cameraSignalThreshold.value || '90', 10));
+      const age = ageSec(ts);
+      const okay = imageUrl && age !== null && age <= threshold;
+      if (okay) {
+        setSignal(true, 'Signal healthy', `Latest image is within ${threshold} seconds.`);
+        cameraNoSignalOverlay.classList.remove('show');
+      } else {
+        setSignal(false, 'No signal', !imageUrl ? 'The API did not return a latest image URL for this device.' : `No new image within ${threshold} seconds. Latest age: ${ageText(age)}.`);
+        cameraNoSignalOverlay.classList.add('show');
+      }
+    }
+
+    async function loadCameraHistory() {
+      const deviceId = cameraDeviceId.value.trim();
+      const startIso = toIso(cameraHistoryStart.value);
+      const endIso = toIso(cameraHistoryEnd.value);
+      const url = buildUrl('/api/monitoring/history', { device_id: deviceId, start_time: startIso, end_time: endIso, _ts: Date.now() });
+      setDebug('Loading camera history', { url });
+      const data = await fetchJson2(url);
+      historyData = filterHistory(data.images || data.data || []);
+      cameraStatCount.textContent = String(historyData.length);
+      const startTxt = cameraHistoryStart.value ? new Date(cameraHistoryStart.value).toLocaleString() : 'beginning';
+      const endTxt = cameraHistoryEnd.value ? new Date(cameraHistoryEnd.value).toLocaleString() : 'latest available';
+      cameraHistoryMeta.textContent = historyData.length ? `Showing ${historyData.length} historical image(s) from ${startTxt} to ${endTxt}. Click an image to open Image viewer.` : `No historical images found between ${startTxt} and ${endTxt}.`;
+      renderHistory(historyData);
+    }
+
+    async function refreshCameraAll() {
+      try { await loadLatestCamera(); } catch (err) { setSignal(false, 'No signal', String(err.message || err)); cameraNoSignalOverlay.classList.add('show'); setDebug('Latest image error', { error: String(err.message || err) }); }
+      try { await loadCameraHistory(); } catch (err) { renderHistory([]); setDebug('History error', { error: String(err.message || err) }); }
+      ensureCameraTabs();
+    }
+
+    function scheduleCameraRefresh() {
+      if (refreshHandle) clearInterval(refreshHandle);
+      const secs = Math.max(3, parseInt(cameraPollingInterval.value || '10', 10));
+      if (autoRefresh) {
+        refreshHandle = setInterval(refreshCameraAll, secs * 1000);
+        cameraToggleRefreshBtn.textContent = 'Pause auto refresh';
+      } else {
+        cameraToggleRefreshBtn.textContent = 'Resume auto refresh';
+      }
+      ensureCameraTabs();
+    }
+
+    cameraHistorySearchBtn.addEventListener('click', () => { playUiTick(); loadCameraHistory(); });
+    cameraLast10MinBtn.addEventListener('click', () => { playUiTick(); setTimeWindowMinutes(10); loadCameraHistory(); });
+    cameraLast1HourBtn.addEventListener('click', () => { playUiTick(); setTimeWindowHours(1); loadCameraHistory(); });
+    cameraLast24HourBtn.addEventListener('click', () => { playUiTick(); setTimeWindowHours(24); loadCameraHistory(); });
+    cameraAllHistoryBtn.addEventListener('click', () => { playUiTick(); cameraHistoryStart.value = ''; cameraHistoryEnd.value = ''; loadCameraHistory(); });
+    cameraClearTimeBtn.addEventListener('click', () => { playUiTick(); cameraHistoryStart.value = ''; cameraHistoryEnd.value = ''; loadCameraHistory(); });
+    cameraToggleRefreshBtn.addEventListener('click', () => { playUiTick(); autoRefresh = !autoRefresh; scheduleCameraRefresh(); ensureCameraTabs(); });
+    cameraClearDebugBtn.addEventListener('click', () => { playUiTick(); cameraDebugContent.innerHTML = '<div class="summary-box">Camera debug console cleared.</div>'; ensureCameraTabs(); activateVizPanel('cameraDebugPanel'); });
+    cameraPollingInterval.addEventListener('change', scheduleCameraRefresh);
+    cameraPollingInterval.addEventListener('input', scheduleCameraRefresh);
+    cameraLatestImage.addEventListener('click', () => { const url = cameraLatestImage.dataset.full || cameraLatestImage.src; if (url) openViewer(url, latestData?.timestamp || latestData?.captured_at_utc || ''); });
+    cameraViewerZoomInBtn.addEventListener('click', () => { viewerScale = Math.min(8, viewerScale + 0.25); setViewerTransform(); });
+    cameraViewerZoomOutBtn.addEventListener('click', () => { viewerScale = Math.max(1, viewerScale - 0.25); setViewerTransform(); });
+    cameraViewerResetBtn.addEventListener('click', resetViewer);
+    cameraViewerCloseBtn.addEventListener('click', () => activateVizPanel('formRunningPanel'));
+    cameraViewerStage.addEventListener('wheel', e => { e.preventDefault(); viewerScale = Math.max(1, Math.min(8, viewerScale + (e.deltaY < 0 ? 0.18 : -0.18))); setViewerTransform(); }, { passive: false });
+    cameraViewerImage.addEventListener('mousedown', e => { dragging = true; dragStartX = e.clientX - viewerX; dragStartY = e.clientY - viewerY; cameraViewerImage.style.cursor = 'grabbing'; });
+    window.addEventListener('mousemove', e => { if (!dragging) return; viewerX = e.clientX - dragStartX; viewerY = e.clientY - dragStartY; setViewerTransform(); });
+    window.addEventListener('mouseup', () => { dragging = false; cameraViewerImage.style.cursor = 'grab'; });
+    cameraViewerImage.addEventListener('dblclick', resetViewer);
+
+    leftPanelTabs.forEach(btn => btn.addEventListener('click', () => {
+      if (btn.dataset.leftPanel === 'cameraLeftPanel') {
+        ensureCameraTabs();
+      }
+    }));
+
+    setTimeWindowHours(24);
+    scheduleCameraRefresh();
+    refreshCameraAll();
+  }
+
   backendUrlInput.value = state.backendUrl || defaultBackend;
   initMap();
   setupMovableMapToolbar();
@@ -1341,5 +1550,6 @@ ${state.ml.detectedEvents.join(', ')}` : 'No event folders with PoF.asc detected
   updateCurrentTime();
   setInterval(updateCurrentTime, 1000);
   initMonitoringDataPanel();
+  initCameraPanel();
   checkBackend();
 })();
