@@ -226,6 +226,38 @@ async def upload_monitoring_image(
     return metadata
 
 
+
+
+@router.get("/api/monitoring/devices")
+def list_monitoring_devices():
+    devices = []
+    seen = set()
+    if MONITORING_INDEX_FILE.exists():
+        try:
+            with MONITORING_INDEX_FILE.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    device_id = str(item.get("device_id") or "").strip()
+                    if device_id and device_id not in seen:
+                        seen.add(device_id)
+                        devices.append(device_id)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to list monitoring devices: {exc}") from exc
+    for path in MONITORING_IMAGES_DIR.iterdir() if MONITORING_IMAGES_DIR.exists() else []:
+        if path.is_dir() and path.name not in seen:
+            seen.add(path.name)
+            devices.append(path.name)
+    if not devices:
+        devices = ["pc-camera-01"]
+    devices = sorted(devices)
+    return {"status": "ok", "devices": devices}
+
 @router.get("/api/monitoring/image/{device_id}/{filename}")
 def get_monitoring_image(device_id: str, filename: str):
     device_safe = _safe_name(device_id, "device")

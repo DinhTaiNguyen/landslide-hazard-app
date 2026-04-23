@@ -110,60 +110,65 @@
           <div id="monitorStatusBox" class="summary-box">Monitoring idle.</div>
         </div>
       </div>
-
       <div id="cameraLeftPanel" class="left-subpanel">
-        <div class="section-block camera-section-block">
+        <div class="section-block">
           <div class="section-title">History control center</div>
-          <div class="camera-control-grid">
-            <div class="field-group"><label class="field-label" for="cameraDeviceId">Device ID</label><input id="cameraDeviceId" class="field-input" type="text" value="pc-camera-01" /></div>
-            <div class="field-group"><label class="field-label" for="cameraHistoryStart">History Start Time</label><input id="cameraHistoryStart" class="field-input" type="datetime-local" /></div>
-            <div class="field-group"><label class="field-label" for="cameraHistoryEnd">History End Time</label><input id="cameraHistoryEnd" class="field-input" type="datetime-local" /></div>
-            <div class="field-group"><label class="field-label" for="cameraSignalThreshold">No-Signal Threshold (sec)</label><input id="cameraSignalThreshold" class="field-input" type="number" min="5" step="5" value="90" /></div>
-            <div class="field-group"><label class="field-label" for="cameraPollingInterval">Polling Interval (sec)</label><input id="cameraPollingInterval" class="field-input" type="number" min="3" step="1" value="10" /></div>
+          <div class="field-group"><label class="field-label" for="cameraDeviceSelect">Device ID</label><select id="cameraDeviceSelect" class="field-input"><option value="">Loading device list...</option></select></div>
+          <div class="field-group"><label class="field-label" for="cameraStartTime">History Start Time</label><input id="cameraStartTime" class="field-input" type="datetime-local" step="1" /></div>
+          <div class="field-group"><label class="field-label" for="cameraEndTime">History End Time</label><input id="cameraEndTime" class="field-input" type="datetime-local" step="1" /></div>
+          <div class="field-group"><label class="field-label" for="cameraNoSignalSeconds">No-Signal Threshold (sec)</label><input id="cameraNoSignalSeconds" class="field-input" type="number" value="90" min="5" step="5" /></div>
+          <div class="field-group"><label class="field-label" for="cameraPollSeconds">Polling Interval (sec)</label><input id="cameraPollSeconds" class="field-input" type="number" value="10" min="3" step="1" /></div>
+          <div class="button-row two-buttons">
+            <button id="cameraHistorySearchBtn" type="button" class="primary-btn">History Search</button>
+            <button id="cameraClearDebugBtn" type="button" class="small-btn">Clear debug</button>
           </div>
-          <div class="camera-button-grid">
-            <button id="cameraHistorySearchBtn" type="button" class="primary-btn">History search</button>
+          <div class="camera-quick-grid">
             <button id="cameraLast10MinBtn" type="button" class="small-btn">Last 10 minute</button>
-            <button id="cameraLast1HourBtn" type="button" class="small-btn">Last 1 hour</button>
-            <button id="cameraLast24HourBtn" type="button" class="small-btn">Last 24 hour</button>
+            <button id="cameraLastHourBtn" type="button" class="small-btn">Last 1 hour</button>
+            <button id="cameraLastDayBtn" type="button" class="small-btn">Last 24 hour</button>
             <button id="cameraAllHistoryBtn" type="button" class="small-btn">All history</button>
             <button id="cameraClearTimeBtn" type="button" class="small-btn">Clear time filter</button>
-            <button id="cameraToggleRefreshBtn" type="button" class="small-btn">Pause auto refresh</button>
-            <button id="cameraClearDebugBtn" type="button" class="small-btn danger-outline">Clear debug</button>
+          </div>
+          <div class="button-row two-buttons">
+            <button id="cameraStartPollingBtn" type="button" class="primary-btn">Start Polling</button>
+            <button id="cameraStopPollingBtn" type="button" class="small-btn danger-outline">Stop Polling</button>
           </div>
         </div>
 
-        <div class="section-block camera-section-block">
+        <div class="section-block">
           <div class="section-title">Signal checking</div>
-          <div id="cameraSignalPill" class="camera-signal-pill waiting"><span id="cameraSignalDot" class="camera-signal-dot"></span><span id="cameraSignalText">Checking signal...</span></div>
-          <div class="camera-stat-grid">
+          <div id="cameraSignalPill" class="status-pill waiting">Checking signal...</div>
+          <div class="camera-signal-grid">
             <div class="summary-box"><strong>Device</strong><div id="cameraStatDevice">-</div></div>
             <div class="summary-box"><strong>Latest capture</strong><div id="cameraStatLatest">-</div></div>
             <div class="summary-box"><strong>History count</strong><div id="cameraStatCount">0</div></div>
           </div>
-          <div id="cameraSignalMessage" class="summary-box">Waiting for monitoring image data...</div>
+          <div id="cameraSignalSummary" class="summary-box">Default signal rule: if the latest image age is greater than the threshold, the dashboard will show No signal.</div>
         </div>
 
-        <div class="section-block camera-section-block">
+        <div class="section-block">
           <div class="section-title">Latest image</div>
-          <div id="cameraLatestMeta" class="summary-box small-text">Waiting for data...</div>
-          <div id="cameraLatestWrap" class="camera-image-wrap camera-empty-state">
-            <img id="cameraLatestImage" alt="Latest monitoring image" />
-            <div id="cameraNoSignalOverlay" class="camera-no-signal-overlay">No signal</div>
+          <div id="cameraLatestMeta" class="summary-box">Waiting for data...</div>
+          <div id="cameraLatestCard" class="camera-image-card">
+            <img id="cameraLatestImage" alt="Latest camera image" />
+            <div id="cameraNoSignalOverlay" class="camera-nosignal-overlay">
+              <div class="camera-nosignal-box">
+                <strong>No signal</strong>
+                <div id="cameraNoSignalText">No recent monitoring image was found for the selected device.</div>
+              </div>
+            </div>
           </div>
           <div class="camera-chip-row">
-            <div id="cameraChipDevice" class="file-chip">Device: -</div>
-            <div id="cameraChipTime" class="file-chip">Time: -</div>
-            <div id="cameraChipAge" class="file-chip">Age: -</div>
+            <div class="file-chip" id="cameraChipDevice">Device: -</div>
+            <div class="file-chip" id="cameraChipTime">Time: -</div>
+            <div class="file-chip" id="cameraChipAge">Age: -</div>
           </div>
         </div>
 
-        <div class="section-block camera-section-block">
+        <div class="section-block">
           <div class="section-title">Historical images</div>
-          <div id="cameraHistoryMeta" class="summary-box small-text">Select a time range if needed, then click a thumbnail to open Image viewer.</div>
-          <div id="cameraHistoryGrid" class="camera-history-grid">
-            <div class="summary-box">No historical images loaded yet.</div>
-          </div>
+          <div id="cameraHistoryMeta" class="summary-box">Select a time range if needed, then click a thumbnail to open Image viewer.</div>
+          <div id="cameraHistoryGrid" class="camera-history-grid"><div class="summary-box">No historical images loaded yet.</div></div>
         </div>
       </div>
     </aside>
@@ -233,6 +238,26 @@
         <section id="monitorHistoryChartPanel" class="viz-panel"><div class="summary-scroll"><div class="summary-box">History chart inactive. Click Start polling in Monitoring Data.</div><div class="monitor-history-chart-wrap"><canvas id="monitorHistoryChartCanvas"></canvas></div></div></section>
         <section id="monitorHistoryTablePanel" class="viz-panel"><div id="monitorHistoryTableWrap" class="summary-scroll table-scroll"><div class="summary-box">History table inactive. Click Start polling in Monitoring Data.</div></div></section>
         <section id="monitorDebugPanel" class="viz-panel"><div id="monitorDebugContent" class="summary-scroll"><div class="summary-box">No debug info yet.</div></div></section>
+        <section id="cameraDebugPanel" class="viz-panel"><div id="cameraDebugContent" class="summary-scroll"><div class="summary-box">No debug info yet for camera.</div></div></section>
+        <section id="cameraImageViewerPanel" class="viz-panel">
+          <div class="summary-scroll camera-viewer-panel">
+            <div class="camera-viewer-toolbar">
+              <div>
+                <div class="section-title" style="margin-bottom:6px;">Image viewer</div>
+                <div id="cameraViewerInfo" class="summary-box">Click the latest image or a historical image to open it here.</div>
+              </div>
+              <div class="camera-viewer-actions">
+                <button id="cameraZoomOutBtn" type="button" class="small-btn">− Zoom out</button>
+                <button id="cameraZoomInBtn" type="button" class="small-btn">+ Zoom in</button>
+                <button id="cameraResetZoomBtn" type="button" class="small-btn">Reset</button>
+                <button id="cameraCloseViewerBtn" type="button" class="small-btn danger-outline">Close</button>
+              </div>
+            </div>
+            <div id="cameraViewerStage" class="camera-viewer-stage">
+              <img id="cameraViewerImage" alt="Camera viewer image" />
+            </div>
+          </div>
+        </section>
       </div>
     </main>
 
